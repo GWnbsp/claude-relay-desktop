@@ -11,17 +11,63 @@ export function Accounts() {
   const { state, actions } = useApp()
   const [filter, setFilter] = useState('all')
   const [open, setOpen] = useState(false)
+  const [editingAccount, setEditingAccount] = useState<Account | null>(null)
 
   const filtered = useMemo(() => {
     if (filter === 'all') return state.accounts
     return state.accounts.filter((a) => a.platform === filter)
   }, [filter, state.accounts])
 
+  // 从配置中找到完整的 Account 对象
+  const findAccountById = (id: string): Account | undefined => {
+    return state.config?.accounts.find((acc) => acc.id === id)
+  }
+
   const handleAdd = async (account: Account) => {
     if (!state.config) return
     const next = { ...state.config, accounts: [...state.config.accounts, account] }
     await actions.saveConfig(next)
     await actions.loadAccounts()
+  }
+
+  const handleEdit = async (account: Account) => {
+    if (!state.config) return
+    const updatedAccounts = state.config.accounts.map((acc) =>
+      acc.id === account.id ? account : acc
+    )
+    const next = { ...state.config, accounts: updatedAccounts }
+    await actions.saveConfig(next)
+    await actions.loadAccounts()
+  }
+
+  const handleDelete = async (accountId: string) => {
+    if (!state.config) return
+    const updatedAccounts = state.config.accounts.filter((acc) => acc.id !== accountId)
+    const next = { ...state.config, accounts: updatedAccounts }
+    await actions.saveConfig(next)
+    await actions.loadAccounts()
+  }
+
+  const handleOpenEdit = (accountSummary: any) => {
+    const fullAccount = findAccountById(accountSummary.id)
+    if (fullAccount) {
+      setEditingAccount(fullAccount)
+      setOpen(true)
+    }
+  }
+
+  const handleClose = () => {
+    setOpen(false)
+    setEditingAccount(null)
+  }
+
+  const handleSave = async (account: Account) => {
+    if (editingAccount) {
+      await handleEdit(account)
+    } else {
+      await handleAdd(account)
+    }
+    handleClose()
   }
 
   return (
@@ -61,12 +107,21 @@ export function Accounts() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <AccountTable accounts={filtered} />
+          <AccountTable
+            accounts={filtered}
+            onEdit={handleOpenEdit}
+            onDelete={handleDelete}
+          />
           <div className="mt-4 text-sm text-muted-foreground">共 {filtered.length} / {state.accounts.length} 个</div>
         </CardContent>
       </Card>
 
-      <AccountDialog open={open} onClose={() => setOpen(false)} onSave={handleAdd} />
+      <AccountDialog
+        open={open}
+        onClose={handleClose}
+        onSave={handleSave}
+        editAccount={editingAccount}
+      />
     </div>
   )
 }
