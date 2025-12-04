@@ -3,3 +3,4 @@ config.toml
 docs/plans
 *.db
 data/
+.worktrees/
