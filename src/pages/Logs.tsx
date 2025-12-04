@@ -1,8 +1,27 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Trash2, Download } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { TauriAPI } from '@/services/api'
 
 export function Logs() {
+  const [lines, setLines] = useState<string[]>(['等待服务启动...'])
+
+  const fetchLogs = async () => {
+    try {
+      const data = await TauriAPI.tailLogs?.()
+      if (data) setLines(data)
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  useEffect(() => {
+    fetchLogs()
+    const id = setInterval(fetchLogs, 5000)
+    return () => clearInterval(id)
+  }, [])
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -34,7 +53,9 @@ export function Logs() {
         <CardContent>
           <div className="rounded-md border bg-muted/50 p-4">
             <div className="font-mono text-sm text-muted-foreground">
-              <p>等待服务启动...</p>
+              {lines.map((l, i) => (
+                <p key={i}>{l}</p>
+              ))}
             </div>
           </div>
         </CardContent>

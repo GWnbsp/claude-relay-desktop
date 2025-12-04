@@ -2,6 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod commands;
+mod config;
 mod server;
 
 use commands::AppState;
@@ -52,6 +53,8 @@ fn main() {
             commands::get_config_path,
             commands::set_config_path,
             commands::validate_config,
+            commands::get_account_models,
+            commands::tail_logs,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -6,6 +6,10 @@ import path from 'path'
 export default defineConfig({
   plugins: [react()],
 
+  define: {
+    global: 'globalThis',
+  },
+
   // Vite options tailored for Tauri development
   clearScreen: false,
 

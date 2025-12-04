@@ -1,60 +1,75 @@
-use std::net::TcpListener;
-use tokio::task::JoinHandle;
+use crate::config::Config;
+use std::path::PathBuf;
+use tauri::AppHandle;
+use tokio::process::{Child, Command};
 
 pub struct ServerHandle {
-    handle: JoinHandle<()>,
+    child: Child,
     port: u16,
 }
 
-impl ServerHandle {
-    pub async fn start(config_path: String) -> Result<Self, String> {
-        // 查找可用端口
-        let port = find_available_port()
-            .ok_or_else(|| "No available port found".to_string())?;
-
-        // 克隆配置路径以便在异步任务中使用
-        let config_for_task = config_path.clone();
-
-        // 启动异步服务
-        let handle = tokio::spawn(async move {
-            // 注意：这里需要等 relay-server 暴露一个可以指定端口的函数
-            // 目前我们先用一个占位实现
-            eprintln!("Server would start on port {} with config {}", port, config_for_task);
-
-            // TODO: 调用 relay_server::run_server(config, port).await
-            // 暂时用一个长时间运行的任务来模拟
-            loop {
-                tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+/// 尝试解析 cc-relay-server 可执行路径：
+/// 1) 打包资源目录 externalBin（tauri resource_dir）
+/// 2) 环境变量 CC_RELAY_BIN_PATH
+/// 3) 当前工作目录 ./target/release/cc-relay-server
+/// 4) 当前工作目录 ./target/debug/cc-relay-server
+/// 5) PATH 中的 cc-relay-server
+fn resolve_binary(app: &AppHandle) -> Option<PathBuf> {
+    if let Some(res_dir) = app.path_resolver().resource_dir() {
+        for name in ["cc-relay-server", "cc-relay-server.exe"] {
+            let candidate = res_dir.join(name);
+            if candidate.exists() {
+                return Some(candidate);
             }
-        });
+        }
+    }
 
-        Ok(ServerHandle { handle, port })
+    if let Ok(p) = std::env::var("CC_RELAY_BIN_PATH") {
+        let pb = PathBuf::from(p);
+        if pb.exists() {
+            return Some(pb);
+        }
+    }
+
+    if let Ok(cwd) = std::env::current_dir() {
+        for rel in ["target/release/cc-relay-server", "target/debug/cc-relay-server"] {
+            let candidate = cwd.join(rel);
+            if candidate.exists() {
+                return Some(candidate);
+            }
+        }
+    }
+
+    which::which("cc-relay-server").ok()
+}
+
+impl ServerHandle {
+    pub async fn start(app: &AppHandle, config_path: String, port_hint: Option<u16>) -> Result<Self, String> {
+        // 读取配置获取端口；暂不支持动态覆盖端口，沿用配置
+        let config = Config::load(&config_path)
+            .map_err(|e| format!("Failed to load config: {}", e))?;
+        let port = port_hint.unwrap_or(config.server.port);
+
+        let bin_path = resolve_binary(app).ok_or_else(|| "cc-relay-server not found; ensure packaged externalBin or set CC_RELAY_BIN_PATH".to_string())?;
+
+        let mut cmd = Command::new(bin_path);
+        cmd.arg("--config").arg(&config_path);
+        // 如果需要端口覆盖，可在未来通过临时生成 config 文件实现
+
+        let child = cmd
+            .spawn()
+            .map_err(|e| format!("Failed to spawn cc-relay-server: {}", e))?;
+
+        Ok(ServerHandle { child, port })
     }
 
     pub async fn stop(self) {
-        self.handle.abort();
+        let mut child = self.child;
+        // 尝试优雅退出（向进程发送终止信号）
+        let _ = child.kill().await;
     }
 
     pub fn port(&self) -> u16 {
         self.port
-    }
-}
-
-/// 查找可用端口（3000-4000 范围）
-fn find_available_port() -> Option<u16> {
-    (3000..4000).find(|port| {
-        TcpListener::bind(("127.0.0.1", *port)).is_ok()
-    })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_find_available_port() {
-        let port = find_available_port();
-        assert!(port.is_some());
-        assert!(port.unwrap() >= 3000 && port.unwrap() < 4000);
     }
 }

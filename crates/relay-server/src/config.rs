@@ -148,10 +148,11 @@ impl Config {
             path: path.as_ref().display().to_string(),
             source: e,
         })?;
+        Self::load_from_str(&content)
+    }
 
-        let config: Config =
-            toml::from_str(&content).map_err(|e| ConfigError::Parse { source: e })?;
-
+    pub fn load_from_str(content: &str) -> Result<Self, ConfigError> {
+        let config: Config = toml::from_str(content).map_err(|e| ConfigError::Parse { source: e })?;
         config.validate()?;
         Ok(config)
     }

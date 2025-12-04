@@ -1,8 +1,25 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { PlayCircle, StopCircle, Activity } from 'lucide-react'
+import { useApp } from '@/contexts/AppContext'
+import { useState } from 'react'
 
 export function Dashboard() {
+  const { state, actions } = useApp()
+  const [loading, setLoading] = useState(false)
+
+  const handleStart = async () => {
+    setLoading(true)
+    await actions.startServer()
+    setLoading(false)
+  }
+
+  const handleStop = async () => {
+    setLoading(true)
+    await actions.stopServer()
+    setLoading(false)
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -25,19 +42,23 @@ export function Dashboard() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium">状态</p>
-              <p className="text-2xl font-bold text-muted-foreground">未运行</p>
+              <p className="text-2xl font-bold">
+                {state.serverStatus.running ? '运行中' : '未运行'}
+              </p>
             </div>
             <div>
               <p className="text-sm font-medium">端口</p>
-              <p className="text-2xl font-bold text-muted-foreground">-</p>
+              <p className="text-2xl font-bold text-muted-foreground">
+                {state.serverStatus.port ?? '-'}
+              </p>
             </div>
           </div>
           <div className="flex gap-2">
-            <Button className="flex-1">
+            <Button className="flex-1" onClick={handleStart} disabled={state.serverStatus.running || loading}>
               <PlayCircle className="mr-2 h-4 w-4" />
               启动服务
             </Button>
-            <Button variant="outline" className="flex-1" disabled>
+            <Button variant="outline" className="flex-1" onClick={handleStop} disabled={!state.serverStatus.running || loading}>
               <StopCircle className="mr-2 h-4 w-4" />
               停止服务
             </Button>
