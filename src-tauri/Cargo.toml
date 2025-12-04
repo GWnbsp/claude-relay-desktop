@@ -11,16 +11,20 @@ edition = "2021"
 tauri-build = { version = "1.5", features = [] }
 
 [dependencies]
-tauri = { version = "1.6", features = ["dialog-open", "dialog-save", "notification-all", "system-tray", "shell-open"] }
+tauri = { version = "1.6", features = ["dialog-open", "dialog-save", "fs-read-file", "fs-write-file", "notification-all", "system-tray", "shell-open"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tokio = { version = "1.0", features = ["full"] }
+toml = "0.8"
 
 # 引用现有的 relay crates
-relay-core = { path = "../../crates/relay-core" }
-relay-server = { path = "../../crates/relay-server" }
+relay-core = { path = "../crates/relay-core" }
+relay-server = { path = "../crates/relay-server" }
 
 [features]
 # this feature is used for production builds or when `devPath` points to the filesystem
 # DO NOT REMOVE!!
 custom-protocol = ["tauri/custom-protocol"]
+
+# This is a standalone package, not part of the parent workspace
+[workspace]
