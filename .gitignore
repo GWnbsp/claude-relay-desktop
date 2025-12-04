@@ -1,6 +1,21 @@
+# Rust
 target
+
+# Config
 config.toml
 docs/plans
+
+# Database
 *.db
 data/
+
+# Worktrees
 .worktrees/
+
+# Frontend
+node_modules/
+dist/
+*.local
+
+# Logs
+*.log
