@@ -9,38 +9,78 @@ pub struct ServerHandle {
 }
 
 /// 尝试解析 cc-relay-server 可执行路径：
-/// 1) 打包资源目录 externalBin（tauri resource_dir）
-/// 2) 环境变量 CC_RELAY_BIN_PATH
-/// 3) 当前工作目录 ./target/release/cc-relay-server
-/// 4) 当前工作目录 ./target/debug/cc-relay-server
-/// 5) PATH 中的 cc-relay-server
+/// 1) 环境变量 CC_RELAY_BIN_PATH
+/// 2) 相对于 src-tauri 的 ../target/release/cc-relay-server
+/// 3) 相对于 src-tauri 的 ../target/debug/cc-relay-server
+/// 4) 当前工作目录 ./target/release/cc-relay-server
+/// 5) 当前工作目录 ./target/debug/cc-relay-server
+/// 6) Tauri 资源目录（打包后）
+/// 7) PATH 中的 cc-relay-server
 fn resolve_binary(app: &AppHandle) -> Option<PathBuf> {
-    if let Some(res_dir) = app.path_resolver().resource_dir() {
-        for name in ["cc-relay-server", "cc-relay-server.exe"] {
-            let candidate = res_dir.join(name);
-            if candidate.exists() {
-                return Some(candidate);
-            }
-        }
-    }
+    use std::env;
 
-    if let Ok(p) = std::env::var("CC_RELAY_BIN_PATH") {
+    // 1. 环境变量
+    if let Ok(p) = env::var("CC_RELAY_BIN_PATH") {
         let pb = PathBuf::from(p);
         if pb.exists() {
+            eprintln!("[resolve_binary] Found via CC_RELAY_BIN_PATH: {:?}", pb);
             return Some(pb);
         }
     }
 
-    if let Ok(cwd) = std::env::current_dir() {
+    // 2-3. 相对于 src-tauri 的路径（开发模式最常见）
+    if let Ok(exe_path) = env::current_exe() {
+        if let Some(exe_dir) = exe_path.parent() {
+            // 从 src-tauri/target/debug 回到项目根目录
+            for ancestor_count in 0..4 {
+                let mut base = exe_dir.to_path_buf();
+                for _ in 0..ancestor_count {
+                    if let Some(parent) = base.parent() {
+                        base = parent.to_path_buf();
+                    }
+                }
+
+                for rel in ["target/release/cc-relay-server", "target/debug/cc-relay-server"] {
+                    let candidate = base.join(rel);
+                    if candidate.exists() {
+                        eprintln!("[resolve_binary] Found via exe ancestor: {:?}", candidate);
+                        return Some(candidate);
+                    }
+                }
+            }
+        }
+    }
+
+    // 4-5. 当前工作目录
+    if let Ok(cwd) = env::current_dir() {
         for rel in ["target/release/cc-relay-server", "target/debug/cc-relay-server"] {
             let candidate = cwd.join(rel);
             if candidate.exists() {
+                eprintln!("[resolve_binary] Found via cwd: {:?}", candidate);
                 return Some(candidate);
             }
         }
     }
 
-    which::which("cc-relay-server").ok()
+    // 6. Tauri 资源目录（打包后）
+    if let Some(res_dir) = app.path_resolver().resource_dir() {
+        for name in ["cc-relay-server", "cc-relay-server.exe"] {
+            let candidate = res_dir.join(name);
+            if candidate.exists() {
+                eprintln!("[resolve_binary] Found via resource_dir: {:?}", candidate);
+                return Some(candidate);
+            }
+        }
+    }
+
+    // 7. 系统 PATH
+    if let Ok(path) = which::which("cc-relay-server") {
+        eprintln!("[resolve_binary] Found via PATH: {:?}", path);
+        return Some(path);
+    }
+
+    eprintln!("[resolve_binary] Not found anywhere");
+    None
 }
 
 impl ServerHandle {
