@@ -1,19 +1,28 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Save, FolderOpen } from 'lucide-react'
+import { Save, FolderOpen, Code2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import { TauriAPI } from '@/services/api'
-import { ConfigManager } from '@/services/config'
+import { ConfigManager, Config } from '@/services/config'
 import { ApiKeysManager } from '@/components/settings/ApiKeysManager'
+import { AdvancedEditDialog } from '@/components/settings/AdvancedEditDialog'
 import { open } from '@tauri-apps/api/dialog'
 
 export function Settings() {
   const { state, actions } = useApp()
-  const [configText, setConfigText] = useState('')
   const [path, setPath] = useState('')
   const [saving, setSaving] = useState(false)
+  const [showAdvanced, setShowAdvanced] = useState(false)
+
+  // Form state
   const [apiKeys, setApiKeys] = useState<string[]>([])
+  const [host, setHost] = useState('127.0.0.1')
+  const [port, setPort] = useState(3000)
+  const [databasePath, setDatabasePath] = useState('data/relay.db')
+  const [logLevel, setLogLevel] = useState('info')
+  const [stickyTtl, setStickyTtl] = useState(3600)
+  const [renewalThreshold, setRenewalThreshold] = useState(300)
 
   useEffect(() => {
     TauriAPI.getConfigPath().then(setPath)
@@ -22,23 +31,52 @@ export function Settings() {
 
   useEffect(() => {
     if (state.config) {
-      setConfigText(ConfigManager.stringify(state.config))
       setApiKeys(state.config.api_keys || [])
+      setHost(state.config.server.host)
+      setPort(state.config.server.port)
+      setDatabasePath(state.config.server.database_path)
+      setLogLevel(state.config.server.log_level)
+      setStickyTtl(state.config.session.sticky_ttl_seconds)
+      setRenewalThreshold(state.config.session.renewal_threshold_seconds)
     }
   }, [state.config])
 
+  const buildConfig = (): Config => {
+    return {
+      server: {
+        host,
+        port,
+        database_path: databasePath,
+        log_level: logLevel,
+      },
+      api_keys: apiKeys,
+      accounts: state.config?.accounts || [],
+      session: {
+        sticky_ttl_seconds: stickyTtl,
+        renewal_threshold_seconds: renewalThreshold,
+      },
+    }
+  }
+
   const handleSave = async () => {
+    if (!state.config) return
     setSaving(true)
+    const updated = buildConfig()
+    const configText = ConfigManager.stringify(updated)
     await TauriAPI.writeConfig(configText)
     await actions.loadConfig()
     setSaving(false)
   }
 
   const handleApiKeysChange = (keys: string[]) => {
-    if (!state.config) return
-    const updated = { ...state.config, api_keys: keys }
     setApiKeys(keys)
-    setConfigText(ConfigManager.stringify(updated))
+  }
+
+  const handleAdvancedSave = async (configText: string) => {
+    setSaving(true)
+    await TauriAPI.writeConfig(configText)
+    await actions.loadConfig()
+    setSaving(false)
   }
 
   const handlePick = async () => {
@@ -52,11 +90,17 @@ export function Settings() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-3xl font-bold tracking-tight">设置</h2>
-        <p className="text-muted-foreground">
-          配置服务器参数和应用选项
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-3xl font-bold tracking-tight">设置</h2>
+          <p className="text-muted-foreground">
+            配置服务器参数和应用选项
+          </p>
+        </div>
+        <Button variant="outline" onClick={() => setShowAdvanced(true)}>
+          <Code2 className="mr-2 h-4 w-4" />
+          高级编辑
+        </Button>
       </div>
 
       <div className="grid gap-6">
@@ -68,12 +112,12 @@ export function Settings() {
           <CardHeader>
             <CardTitle>服务器配置</CardTitle>
             <CardDescription>
-              修改服务器监听地址和端口
+              修改服务器监听地址、端口和其他参数
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium">配置文件</label>
+              <label className="text-sm font-medium">配置文件路径</label>
               <div className="flex gap-2">
                 <input
                   type="text"
@@ -87,17 +131,101 @@ export function Settings() {
                 </Button>
               </div>
             </div>
-            <textarea
-              className="w-full h-64 rounded-md border border-input bg-background px-3 py-2 text-sm font-mono"
-              value={configText}
-              onChange={(e) => setConfigText(e.target.value)}
-            />
-            <Button onClick={handleSave} disabled={saving}>
-              <Save className="mr-2 h-4 w-4" />
-              {saving ? '保存中...' : '保存配置并重启'}
-            </Button>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">监听地址</label>
+                <input
+                  type="text"
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  value={host}
+                  onChange={(e) => setHost(e.target.value)}
+                  placeholder="127.0.0.1"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">监听端口</label>
+                <input
+                  type="number"
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  value={port}
+                  onChange={(e) => setPort(Number(e.target.value))}
+                  min={1}
+                  max={65535}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">数据库路径</label>
+              <input
+                type="text"
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={databasePath}
+                onChange={(e) => setDatabasePath(e.target.value)}
+                placeholder="data/relay.db"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">日志级别</label>
+              <select
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={logLevel}
+                onChange={(e) => setLogLevel(e.target.value)}
+              >
+                <option value="debug">Debug</option>
+                <option value="info">Info</option>
+                <option value="warn">Warn</option>
+                <option value="error">Error</option>
+              </select>
+            </div>
           </CardContent>
         </Card>
+
+        {/* Session Settings */}
+        <Card>
+          <CardHeader>
+            <CardTitle>会话配置</CardTitle>
+            <CardDescription>
+              配置会话保持和续期策略
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">会话保持时长（秒）</label>
+                <input
+                  type="number"
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  value={stickyTtl}
+                  onChange={(e) => setStickyTtl(Number(e.target.value))}
+                  min={0}
+                />
+                <p className="text-xs text-muted-foreground">同一会话将保持使用相同账户的时长</p>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">续期阈值（秒）</label>
+                <input
+                  type="number"
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  value={renewalThreshold}
+                  onChange={(e) => setRenewalThreshold(Number(e.target.value))}
+                  min={0}
+                />
+                <p className="text-xs text-muted-foreground">会话剩余时间低于此值时自动续期</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Save Button */}
+        <div className="flex justify-end">
+          <Button onClick={handleSave} disabled={saving}>
+            <Save className="mr-2 h-4 w-4" />
+            {saving ? '保存中...' : '保存配置'}
+          </Button>
+        </div>
 
         {/* Application Settings */}
         <Card>
@@ -135,6 +263,14 @@ export function Settings() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Advanced Edit Dialog */}
+      <AdvancedEditDialog
+        open={showAdvanced}
+        onClose={() => setShowAdvanced(false)}
+        onSave={handleAdvancedSave}
+        initialValue={state.config ? ConfigManager.stringify(state.config) : ''}
+      />
     </div>
   )
 }
