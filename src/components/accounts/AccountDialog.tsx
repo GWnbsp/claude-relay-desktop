@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Account } from '@/services/config'
+import { useTranslation } from 'react-i18next'
 
 interface Props {
   open: boolean
@@ -25,6 +26,7 @@ function generateAccountId(type: string): string {
 }
 
 export function AccountDialog({ open, onClose, onSave, editAccount }: Props) {
+  const { t } = useTranslation()
   const [type, setType] = useState<Account['type']>('claude-api')
   const [id, setId] = useState('')
   const [name, setName] = useState('')
@@ -105,18 +107,18 @@ export function AccountDialog({ open, onClose, onSave, editAccount }: Props) {
 
     // Priority 验证
     if (isNaN(priority) || priority < 0) {
-      alert('优先级必须是非负数')
+      alert(t('accounts.priorityInvalid'))
       return
     }
 
     // Proxy 验证
     if (proxyEnabled) {
       if (!proxyHost) {
-        alert('启用代理时必须填写代理地址')
+        alert(t('accounts.proxyHostRequired'))
         return
       }
       if (proxyPort < 1 || proxyPort > 65535) {
-        alert('代理端口必须在 1-65535 之间')
+        alert(t('accounts.proxyPortInvalid'))
         return
       }
     }
@@ -151,14 +153,15 @@ export function AccountDialog({ open, onClose, onSave, editAccount }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <Card className="w-full max-w-lg">
-        <CardHeader>
-          <CardTitle>{isEditMode ? '编辑账户' : '添加账户'}</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 overflow-y-auto">
+      <div className="w-full max-w-lg my-auto">
+        <Card className="w-full max-h-[90vh] flex flex-col">
+          <CardHeader>
+            <CardTitle>{isEditMode ? t('accounts.editAccount') : t('accounts.addAccount')}</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4 overflow-y-auto">
           <div className="space-y-2">
-            <label className="text-sm font-medium">账户类型</label>
+            <label className="text-sm font-medium">{t('accounts.accountType')}</label>
             <select
               className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               value={type}
@@ -172,44 +175,44 @@ export function AccountDialog({ open, onClose, onSave, editAccount }: Props) {
               ))}
             </select>
             {isEditMode && (
-              <p className="text-xs text-muted-foreground">账户类型创建后无法修改</p>
+              <p className="text-xs text-muted-foreground">{t('accounts.accountTypeDesc')}</p>
             )}
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium">账户昵称</label>
+            <label className="text-sm font-medium">{t('accounts.accountNickname')}</label>
             <input
               className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="为这个账户起个好记的名字"
+              placeholder={t('accounts.accountNicknamePlaceholder')}
             />
-            <p className="text-xs text-muted-foreground">用于在界面上识别不同的账户</p>
+            <p className="text-xs text-muted-foreground">{t('accounts.accountNicknameDesc')}</p>
           </div>
 
           {isEditMode && (
             <div className="space-y-2">
-              <label className="text-sm font-medium text-muted-foreground">账户 ID</label>
+              <label className="text-sm font-medium text-muted-foreground">{t('accounts.accountId')}</label>
               <input
                 className="w-full rounded-md border border-input bg-muted px-3 py-2 text-sm text-muted-foreground"
                 value={id}
                 readOnly
                 disabled
               />
-              <p className="text-xs text-muted-foreground">ID 创建后无法修改</p>
+              <p className="text-xs text-muted-foreground">{t('accounts.accountIdDesc')}</p>
             </div>
           )}
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
-              <label className="text-sm font-medium">优先级</label>
+              <label className="text-sm font-medium">{t('accounts.priority')}</label>
               <input
                 type="number"
                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                 value={priority}
                 onChange={(e) => setPriority(Number(e.target.value))}
               />
-              <p className="text-xs text-muted-foreground">数值越大优先级越高</p>
+              <p className="text-xs text-muted-foreground">{t('accounts.priorityDesc')}</p>
             </div>
             <div className="flex flex-col justify-center gap-2">
               <div className="flex items-center gap-2">
@@ -221,37 +224,37 @@ export function AccountDialog({ open, onClose, onSave, editAccount }: Props) {
                   className="h-4 w-4"
                 />
                 <label htmlFor="enabled" className="text-sm font-medium">
-                  启用此账户
+                  {t('accounts.enabled')}
                 </label>
               </div>
-              <p className="text-xs text-muted-foreground">禁用后不会被使用</p>
+              <p className="text-xs text-muted-foreground">{t('accounts.disabledDesc')}</p>
             </div>
           </div>
 
           <div className="space-y-2">
             <label className="text-sm font-medium">
-              {type === 'claude-api' || type === 'openai-responses' ? 'API Key' : 'Refresh Token'}
+              {type === 'claude-api' || type === 'openai-responses' ? t('accounts.apiKey') : t('accounts.refreshToken')}
             </label>
             <input
               type="password"
               className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono"
               value={credential}
               onChange={(e) => setCredential(e.target.value)}
-              placeholder={type === 'claude-api' || type === 'openai-responses' ? '输入 API Key' : '输入 Refresh Token'}
+              placeholder={type === 'claude-api' || type === 'openai-responses' ? t('accounts.apiKeyPlaceholder') : t('accounts.refreshTokenPlaceholder')}
             />
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium">API URL（可选）</label>
+            <label className="text-sm font-medium">{t('accounts.apiUrl')}</label>
             <input
               type="text"
               className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono"
               value={apiUrl}
               onChange={(e) => setApiUrl(e.target.value)}
-              placeholder="例如：https://relay.nf.video 或留空使用默认"
+              placeholder={t('accounts.apiUrlPlaceholder')}
             />
             <p className="text-xs text-muted-foreground">
-              自定义中转服务器地址，留空则使用官方 API 端点
+              {t('accounts.apiUrlDesc')}
             </p>
           </div>
 
@@ -266,14 +269,14 @@ export function AccountDialog({ open, onClose, onSave, editAccount }: Props) {
                 className="h-4 w-4"
               />
               <label htmlFor="proxy-enabled" className="text-sm font-medium">
-                使用代理服务器
+                {t('accounts.useProxy')}
               </label>
             </div>
 
             {proxyEnabled && (
               <div className="space-y-3 pt-2">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">代理类型</label>
+                  <label className="text-sm font-medium">{t('accounts.proxyType')}</label>
                   <select
                     className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                     value={proxyType}
@@ -286,7 +289,7 @@ export function AccountDialog({ open, onClose, onSave, editAccount }: Props) {
 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-2">
-                    <label className="text-sm font-medium">代理地址</label>
+                    <label className="text-sm font-medium">{t('accounts.proxyHost')}</label>
                     <input
                       type="text"
                       className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
@@ -296,7 +299,7 @@ export function AccountDialog({ open, onClose, onSave, editAccount }: Props) {
                     />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-sm font-medium">端口</label>
+                    <label className="text-sm font-medium">{t('accounts.proxyPort')}</label>
                     <input
                       type="number"
                       className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
@@ -309,23 +312,23 @@ export function AccountDialog({ open, onClose, onSave, editAccount }: Props) {
 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-2">
-                    <label className="text-sm font-medium">用户名（可选）</label>
+                    <label className="text-sm font-medium">{t('accounts.proxyUsername')}</label>
                     <input
                       type="text"
                       className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                       value={proxyUsername}
                       onChange={(e) => setProxyUsername(e.target.value)}
-                      placeholder="留空表示无需认证"
+                      placeholder={t('accounts.proxyUsernamePlaceholder')}
                     />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-sm font-medium">密码（可选）</label>
+                    <label className="text-sm font-medium">{t('accounts.proxyPassword')}</label>
                     <input
                       type="password"
                       className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                       value={proxyPassword}
                       onChange={(e) => setProxyPassword(e.target.value)}
-                      placeholder="留空表示无需认证"
+                      placeholder={t('accounts.proxyPasswordPlaceholder')}
                     />
                   </div>
                 </div>
@@ -334,13 +337,14 @@ export function AccountDialog({ open, onClose, onSave, editAccount }: Props) {
           </div>
 
           <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={onClose}>取消</Button>
+            <Button variant="outline" onClick={onClose}>{t('accounts.cancel')}</Button>
             <Button onClick={handleSave} disabled={!name || !credential}>
-              {isEditMode ? '保存修改' : '添加账户'}
+              {isEditMode ? t('accounts.saveChanges') : t('accounts.addAccount')}
             </Button>
           </div>
         </CardContent>
       </Card>
+      </div>
     </div>
   )
 }

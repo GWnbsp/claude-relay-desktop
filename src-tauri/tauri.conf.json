@@ -27,7 +27,7 @@
         "readFile": true,
         "writeFile": true,
         "readDir": false,
-        "scope": ["$APPDATA/*", "$HOME/.config/claude-relay/*"]
+        "scope": ["$APPDATA/*", "$HOME/.config/claude-relay/*", "$DOWNLOAD/*", "$DESKTOP/*", "$DOCUMENT/*"]
       },
       "notification": {
         "all": true
@@ -44,7 +44,15 @@
         "icons/icon.icns",
         "icons/icon.ico"
       ],
-      "resources": []
+      "resources": [],
+      "macOS": {
+        "entitlements": null,
+        "exceptionDomain": "",
+        "frameworks": [],
+        "providerShortName": null,
+        "signingIdentity": null,
+        "minimumSystemVersion": "10.13"
+      }
     },
     "security": {
       "csp": null
@@ -62,7 +70,8 @@
     ],
     "systemTray": {
       "iconPath": "icons/icon.png",
-      "iconAsTemplate": true
+      "iconAsTemplate": false,
+      "menuOnLeftClick": false
     }
   }
 }

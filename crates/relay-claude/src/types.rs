@@ -77,8 +77,8 @@ pub enum ContentBlock {
         name: String,
         input: serde_json::Value,
     },
-    #[serde(other)]
-    Unknown,
+    #[serde(untagged)]
+    Unknown(serde_json::Value),
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

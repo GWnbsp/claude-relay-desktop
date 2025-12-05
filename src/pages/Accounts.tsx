@@ -6,9 +6,11 @@ import { AccountTable } from '@/components/accounts/AccountTable'
 import { useMemo, useState } from 'react'
 import { AccountDialog } from '@/components/accounts/AccountDialog'
 import { Account } from '@/services/config'
+import { useTranslation } from 'react-i18next'
 
 export function Accounts() {
   const { state, actions } = useApp()
+  const { t } = useTranslation()
   const [filter, setFilter] = useState('all')
   const [open, setOpen] = useState(false)
   const [editingAccount, setEditingAccount] = useState<Account | null>(null)
@@ -74,36 +76,36 @@ export function Accounts() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">账户管理</h2>
+          <h2 className="text-3xl font-bold tracking-tight">{t('accounts.title')}</h2>
           <p className="text-muted-foreground">
-            管理已配置的多平台账户
+            {t('accounts.subtitle')}
           </p>
         </div>
         <Button onClick={() => setOpen(true)}>
           <Plus className="mr-2 h-4 w-4" />
-          添加账户
+          {t('accounts.addAccount')}
         </Button>
       </div>
 
       <div className="flex gap-2">
-        <label className="text-sm text-muted-foreground">平台筛选</label>
+        <label className="text-sm text-muted-foreground">{t('accounts.platformFilter')}</label>
         <select
           className="rounded-md border border-input bg-background px-2 py-1 text-sm"
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
         >
-          <option value="all">全部</option>
-          <option value="claude">Claude</option>
-          <option value="gemini">Gemini</option>
-          <option value="codex">OpenAI Responses</option>
+          <option value="all">{t('accounts.all')}</option>
+          <option value="claude">{t('accounts.claude')}</option>
+          <option value="gemini">{t('accounts.gemini')}</option>
+          <option value="codex">{t('accounts.openaiResponses')}</option>
         </select>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>账户列表</CardTitle>
+          <CardTitle>{t('accounts.accountList')}</CardTitle>
           <CardDescription>
-            当前配置的所有账户（Claude / Gemini / OpenAI Responses）
+            {t('accounts.accountListDesc')}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -112,7 +114,9 @@ export function Accounts() {
             onEdit={handleOpenEdit}
             onDelete={handleDelete}
           />
-          <div className="mt-4 text-sm text-muted-foreground">共 {filtered.length} / {state.accounts.length} 个</div>
+          <div className="mt-4 text-sm text-muted-foreground">
+            {t('accounts.totalCount', { filtered: filtered.length, total: state.accounts.length })}
+          </div>
         </CardContent>
       </Card>
 

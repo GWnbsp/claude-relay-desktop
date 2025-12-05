@@ -4,8 +4,12 @@ import { Trash2, Download, RefreshCw } from 'lucide-react'
 import { useEffect, useState, useRef } from 'react'
 import { TauriAPI } from '@/services/api'
 import { listen } from '@tauri-apps/api/event'
+import { save } from '@tauri-apps/api/dialog'
+import { writeTextFile } from '@tauri-apps/api/fs'
+import { useTranslation } from 'react-i18next'
 
 export function Logs() {
+  const { t } = useTranslation()
   const [lines, setLines] = useState<string[]>([])
   const [autoScroll, setAutoScroll] = useState(true)
   const logContainerRef = useRef<HTMLDivElement>(null)
@@ -28,17 +32,28 @@ export function Logs() {
     }
   }
 
-  const handleExportLogs = () => {
-    const logText = lines.join('\n')
-    const blob = new Blob([logText], { type: 'text/plain' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `logs-${new Date().toISOString().replace(/:/g, '-')}.txt`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
+  const handleExportLogs = async () => {
+    try {
+      const logText = lines.join('\n')
+
+      // 使用 Tauri 的保存对话框
+      const defaultFileName = `logs-${new Date().toISOString().replace(/:/g, '-').split('.')[0]}.txt`
+      const filePath = await save({
+        defaultPath: defaultFileName,
+        filters: [{
+          name: 'Text Files',
+          extensions: ['txt']
+        }]
+      })
+
+      // 如果用户取消了对话框，filePath 会是 null
+      if (filePath) {
+        await writeTextFile(filePath, logText)
+        console.log('Logs exported successfully to:', filePath)
+      }
+    } catch (e) {
+      console.error('Failed to export logs:', e)
+    }
   }
 
   // 滚动到底部
@@ -82,23 +97,23 @@ export function Logs() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">日志</h2>
+          <h2 className="text-3xl font-bold tracking-tight">{t('logs.title')}</h2>
           <p className="text-muted-foreground">
-            查看服务器运行日志和请求记录
+            {t('logs.subtitle')}
           </p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={fetchLogs}>
             <RefreshCw className="mr-2 h-4 w-4" />
-            刷新
+            {t('logs.refresh')}
           </Button>
           <Button variant="outline" onClick={handleExportLogs} disabled={lines.length === 0}>
             <Download className="mr-2 h-4 w-4" />
-            导出日志
+            {t('logs.export')}
           </Button>
           <Button variant="outline" onClick={handleClearLogs} disabled={lines.length === 0}>
             <Trash2 className="mr-2 h-4 w-4" />
-            清除日志
+            {t('logs.clear')}
           </Button>
         </div>
       </div>
@@ -107,9 +122,9 @@ export function Logs() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle>实时日志</CardTitle>
+              <CardTitle>{t('logs.realtime')}</CardTitle>
               <CardDescription>
-                最近的服务器日志输出（共 {lines.length} 条）
+                {t('logs.count', { count: lines.length })}
               </CardDescription>
             </div>
             <label className="flex items-center gap-2 text-sm">
@@ -119,7 +134,7 @@ export function Logs() {
                 onChange={(e) => setAutoScroll(e.target.checked)}
                 className="rounded border-gray-300"
               />
-              自动滚动
+              {t('logs.autoScroll')}
             </label>
           </div>
         </CardHeader>
@@ -130,7 +145,7 @@ export function Logs() {
           >
             <div className="font-mono text-xs text-muted-foreground">
               {lines.length === 0 ? (
-                <p className="text-center text-gray-500">暂无日志，请启动服务...</p>
+                <p className="text-center text-gray-500">{t('logs.noLogs')}</p>
               ) : (
                 lines.map((l, i) => (
                   <p key={i} className="whitespace-pre-wrap break-all">

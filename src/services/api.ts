@@ -19,9 +19,16 @@ export interface DashboardStats {
   total_accounts: number
 }
 
+export interface AppSettings {
+  autostart_on_boot: boolean
+  autostart_server: boolean
+  minimize_to_tray: boolean
+}
+
 export const TauriAPI = {
   startServer: () => invoke<number>('start_server'),
   stopServer: () => invoke<void>('stop_server'),
+  restartServer: () => invoke<number>('restart_server'),
   getServerStatus: () => invoke<ServerStatus>('get_server_status'),
   readConfig: () => invoke<string>('read_config'),
   writeConfig: (content: string) => invoke<void>('write_config', { content }),
@@ -32,4 +39,6 @@ export const TauriAPI = {
   tailLogs: (count?: number) => invoke<string[]>('tail_logs', { count }),
   clearLogs: () => invoke<void>('clear_logs'),
   getDashboardStats: () => invoke<DashboardStats>('get_dashboard_stats'),
+  getAppSettings: () => invoke<AppSettings>('get_app_settings'),
+  updateAppSettings: (settings: AppSettings) => invoke<void>('update_app_settings', { settings }),
 }

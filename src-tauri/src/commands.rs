@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
-use tauri::State;
+use tauri::{State, api::notification::Notification};
 
-use crate::{config::Config, logger::LogManager, server::ServerHandle};
+use crate::{app_settings::AppSettings, config::Config, logger::LogManager, server::ServerHandle};
 
 /// 应用全局状态
 pub struct AppState {
@@ -57,22 +57,60 @@ pub async fn start_server(state: State<'_, AppState>, app: tauri::AppHandle) -> 
     // 记录启动日志
     log_manager.log("User requested server start".to_string());
 
+    // ⚠️ 关键修复：检查是否已经有服务器在运行
+    let existing_handle = {
+        let mut guard = state.server_handle.lock().unwrap();
+        guard.take()
+    };
+
+    if let Some(old_handle) = existing_handle {
+        log_manager.log("Stopping existing server before starting new one".to_string());
+        old_handle.stop().await;
+    }
+
     // 启动服务
-    let handle = ServerHandle::start(&app, config_path, None, log_manager, app.clone()).await?;
-    let port = handle.port();
+    match ServerHandle::start(&app, config_path, None, log_manager.clone(), app.clone()).await {
+        Ok(handle) => {
+            let port = handle.port();
 
-    // 保存状态
-    *state.server_port.lock().unwrap() = Some(port);
-    *state.server_handle.lock().unwrap() = Some(handle);
+            // 保存状态
+            *state.server_port.lock().unwrap() = Some(port);
+            *state.server_handle.lock().unwrap() = Some(handle);
 
-    state.log_manager.log(format!("Server started on port {}", port));
+            log_manager.log(format!("Server started on port {}", port));
 
-    Ok(port)
+            // 更新托盘菜单
+            crate::tray::update_tray_menu(&app, true, Some(port));
+
+            // macOS: 更新应用菜单
+            #[cfg(target_os = "macos")]
+            crate::app_menu::update_app_menu(&app, true, Some(port));
+
+            // 发送成功通知
+            let _ = Notification::new(&app.config().tauri.bundle.identifier)
+                .title("Server Started")
+                .body(&format!("Claude Code Relay server is now running on port {}", port))
+                .show();
+
+            Ok(port)
+        }
+        Err(e) => {
+            log_manager.log(format!("Failed to start server: {}", e));
+
+            // 发送失败通知
+            let _ = Notification::new(&app.config().tauri.bundle.identifier)
+                .title("Server Start Failed")
+                .body(&e)
+                .show();
+
+            Err(e)
+        }
+    }
 }
 
 /// 停止服务器
 #[tauri::command]
-pub async fn stop_server(state: State<'_, AppState>) -> Result<(), String> {
+pub async fn stop_server(state: State<'_, AppState>, app: tauri::AppHandle) -> Result<(), String> {
     state.log_manager.log("User requested server stop".to_string());
 
     let handle_opt = {
@@ -83,11 +121,46 @@ pub async fn stop_server(state: State<'_, AppState>) -> Result<(), String> {
     if let Some(handle) = handle_opt {
         handle.stop().await;
         state.log_manager.log("Server stopped successfully".to_string());
+
+        // 发送停止通知
+        let _ = Notification::new(&app.config().tauri.bundle.identifier)
+            .title("Server Stopped")
+            .body("Claude Code Relay server has been stopped")
+            .show();
     } else {
         state.log_manager.log("No server running to stop".to_string());
     }
     *state.server_port.lock().unwrap() = None;
+
+    // 更新托盘菜单
+    crate::tray::update_tray_menu(&app, false, None);
+
+    // macOS: 更新应用菜单
+    #[cfg(target_os = "macos")]
+    crate::app_menu::update_app_menu(&app, false, None);
+
     Ok(())
+}
+
+/// 重启服务器
+#[tauri::command]
+pub async fn restart_server(state: State<'_, AppState>, app: tauri::AppHandle) -> Result<u16, String> {
+    state.log_manager.log("User requested server restart".to_string());
+
+    // 发送重启通知
+    let _ = Notification::new(&app.config().tauri.bundle.identifier)
+        .title("Server Restarting")
+        .body("Claude Code Relay server is restarting...")
+        .show();
+
+    // 先停止现有服务器
+    stop_server(state.clone(), app.clone()).await?;
+
+    // 等待一小段时间确保端口释放
+    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+
+    // 启动新服务器（通知已在 start_server 中处理）
+    start_server(state, app).await
 }
 
 /// 获取服务器状态
@@ -114,18 +187,51 @@ pub async fn read_config(state: State<'_, AppState>) -> Result<String, String> {
 pub async fn write_config(
     content: String,
     state: State<'_, AppState>,
+    app: tauri::AppHandle,
 ) -> Result<(), String> {
     let path = state.config_path.lock().unwrap().clone();
+    let log_manager = state.log_manager.clone();
+
+    // 检查服务器是否正在运行
+    let was_running = state.server_handle.lock().unwrap().is_some();
+    let previous_port = *state.server_port.lock().unwrap();
+
+    log_manager.log(format!("Writing config, server was running: {}", was_running));
 
     // 写入配置文件
     std::fs::write(&path, &content)
         .map_err(|e| format!("Failed to write config to {}: {}", path, e))?;
 
-    // 重启服务以应用新配置
-    stop_server(state.clone()).await?;
-    // 需要 app handle，写 config 后由前端触发 start_server
+    log_manager.log("Config file written successfully".to_string());
 
-    Ok(())
+    // 如果服务器之前在运行，则停止并重启以应用新配置
+    if was_running {
+        log_manager.log("Restarting server to apply new configuration...".to_string());
+
+        // 发送重启通知
+        let _ = tauri::api::notification::Notification::new(&app.config().tauri.bundle.identifier)
+            .title("Server Restarting")
+            .body("Applying new configuration...")
+            .show();
+
+        // 停止服务器
+        stop_server(state.clone(), app.clone()).await?;
+
+        // 重新启动服务器（使用新配置）
+        match start_server(state.clone(), app.clone()).await {
+            Ok(new_port) => {
+                log_manager.log(format!("Server restarted successfully on port {}", new_port));
+                Ok(())
+            }
+            Err(e) => {
+                log_manager.log(format!("Failed to restart server: {}", e));
+                Err(format!("Config saved, but failed to restart server: {}", e))
+            }
+        }
+    } else {
+        log_manager.log("Server was not running, no restart needed".to_string());
+        Ok(())
+    }
 }
 
 /// 获取配置文件路径
@@ -311,4 +417,28 @@ api_key = "replace-me"
     std::fs::write(path, default)
         .map_err(|e| format!("Failed to write default config to {}: {}", path, e))?;
     Ok(default.to_string())
+}
+
+/// 获取应用设置
+#[tauri::command]
+pub async fn get_app_settings(app: tauri::AppHandle) -> Result<AppSettings, String> {
+    AppSettings::load(&app)
+}
+
+/// 更新应用设置
+#[tauri::command]
+pub async fn update_app_settings(
+    settings: AppSettings,
+    app: tauri::AppHandle,
+    settings_state: State<'_, Mutex<AppSettings>>,
+) -> Result<(), String> {
+    // 保存到文件
+    settings.save(&app)?;
+
+    // 更新内存中的状态
+    if let Ok(mut state) = settings_state.lock() {
+        *state = settings;
+    }
+
+    Ok(())
 }

@@ -1,5 +1,5 @@
 use bytes::Bytes;
-use relay_claude::{extract_usage_from_chunk, ClaudeRelay};
+use relay_claude::{extract_usage_from_chunk, ClaudeRelay, ContentBlock, MessagesResponse};
 
 #[test]
 fn test_beta_header_contains_all_features() {
@@ -79,4 +79,52 @@ fn test_extract_usage_without_cache_tokens() {
     assert_eq!(usage.output_tokens, 50);
     assert_eq!(usage.cache_creation_input_tokens, None);
     assert_eq!(usage.cache_read_input_tokens, None);
+}
+
+#[test]
+fn test_unknown_content_block_preserves_type() {
+    // Simulate a response with a "thinking" content block (from thinking beta)
+    let response_json = serde_json::json!({
+        "id": "msg_123",
+        "type": "message",
+        "role": "assistant",
+        "content": [
+            {
+                "type": "thinking",
+                "thinking": "Let me think about this..."
+            },
+            {
+                "type": "text",
+                "text": "Here's my response"
+            }
+        ],
+        "model": "claude-sonnet-4-20250514",
+        "stop_reason": "end_turn",
+        "usage": {
+            "input_tokens": 10,
+            "output_tokens": 20
+        }
+    });
+
+    // Deserialize the response
+    let response: MessagesResponse = serde_json::from_value(response_json.clone())
+        .expect("Should deserialize response");
+
+    // The thinking block should be deserialized as Unknown
+    assert_eq!(response.content.len(), 2);
+    assert!(matches!(response.content[0], ContentBlock::Unknown(_)));
+    assert!(matches!(response.content[1], ContentBlock::Text { .. }));
+
+    // Now serialize it back
+    let serialized = serde_json::to_value(&response.content[0])
+        .expect("Should serialize content block");
+
+    // BUG: Currently this will have type: "Unknown" instead of type: "thinking"
+    // After fix, this assertion should pass:
+    assert_eq!(
+        serialized.get("type").and_then(|v| v.as_str()),
+        Some("thinking"),
+        "Unknown content block should preserve original type, got: {:?}",
+        serialized
+    );
 }

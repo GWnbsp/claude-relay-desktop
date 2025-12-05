@@ -1,218 +1,190 @@
-# Claude Relay RS
+# Claude Code Relay - Desktop Edition
 
-高性能 AI API 中转服务，使用 Rust 实现。支持 Claude、Gemini、OpenAI Responses (Codex) 多平台账户管理与智能调度。
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-## 功能特性
+一个基于 [claude-code-relay](https://github.com/wakaka6/claude-code-relay) 的跨平台桌面应用，为 AI API 中转服务提供图形化管理界面。
 
-### 多平台支持
+## 项目简介
+
+本项目是 [wakaka6/claude-code-relay](https://github.com/wakaka6/claude-code-relay) 的桌面版本，集成了 Tauri 框架，提供：
+
+- 🖥️ **跨平台桌面应用** - 支持 macOS、Windows 和 Linux
+- 🎨 **现代化 UI** - 基于 React + TailwindCSS 的美观界面
+- 🔧 **可视化配置** - 无需手动编辑配置文件
+- 📊 **实时监控** - Dashboard 显示服务器状态和账户信息
+- 🌐 **国际化支持** - 中文/英文双语界面
+- 🎭 **主题切换** - 支持亮色/暗色模式
+- 🚀 **开机自启** - 可选的系统启动项集成
+- 🔔 **系统通知** - 服务器状态变化通知
+- 📋 **系统托盘** - 最小化到托盘，后台运行
+
+## 核心功能
+
+### 多平台 AI API 支持
 
 - **Claude OAuth** - 支持 Claude Code CLI 的 OAuth 认证
 - **Claude API Key** - 支持标准 Anthropic API Key
 - **Gemini** - 支持 Google OAuth 认证
 - **OpenAI Responses** - 支持 OpenAI Responses API (Codex CLI)
 
-### 核心功能
+### 智能中转特性
 
 - **智能账户调度** - 基于优先级的多账户自动切换
 - **粘性会话** - 同一会话绑定同一账户，确保上下文连续性
-- **自动 Token 刷新** - OAuth Token 自动续期，10秒提前刷新策略
+- **自动 Token 刷新** - OAuth Token 自动续期
 - **代理支持** - 每个账户支持独立的 SOCKS5/HTTP 代理配置
-- **自定义 API URL** - 支持配置自定义 API 端点（镜像站/代理）
 - **流式响应** - 完整的 SSE 流式传输支持
 - **错误故障转移** - 智能错误检测与账户自动切换
 
-### 错误处理
-
-支持的错误类型自动检测与处理：
-
-| 错误码 | 类型        | 处理方式       |
-| ------ | ----------- | -------------- |
-| 401    | 认证失败    | 标记账户不可用 |
-| 402    | 余额不足    | 切换到其他账户 |
-| 403    | 组织禁用    | 标记账户不可用 |
-| 429    | 速率限制    | 等待后重试     |
-| 429    | Opus 周限制 | 切换到其他账户 |
-| 529    | API 过载    | 暂时排除账户   |
-
-## 项目结构
-
-```
-claude-relay-rs/
-├── crates/
-│   ├── relay-core/                  # 核心类型、Trait 定义
-│   ├── relay-claude/                # Claude 账户与转发实现
-│   ├── relay-gemini/                # Gemini 账户与转发实现
-│   ├── relay-codex/                 # OpenAI Responses (Codex) 账户与转发实现
-│   ├── relay-openai-to-anthropic/   # OpenAI 格式转换器
-│   └── relay-server/                # HTTP 服务器与路由
-├── config.example.toml              # 配置文件示例
-├── cc-relay-server.service          # Systemd 服务文件
-└── migrations/                      # 数据库迁移文件
-```
-
 ## 快速开始
 
-### 编译
+### 下载安装包
+
+前往 [Releases](../../releases) 页面下载对应平台的安装包：
+
+- **macOS**: `.dmg` 或 `.app`
+- **Windows**: `.exe` 或 `.msi`
+- **Linux**: `.AppImage` 或 `.deb`
+
+### 初次配置
+
+1. 启动应用
+2. 前往 **设置 → 服务器配置** 添加账户
+3. 配置 API Keys（可选，用于访问控制）
+4. 点击 **保存配置**
+5. 前往 **Dashboard** 点击 **启动服务**
+
+### 使用中转服务
+
+配置客户端指向本地中转服务：
 
 ```bash
-cargo build --release
+# Claude Code CLI
+export ANTHROPIC_BASE_URL=http://localhost:3000
+export ANTHROPIC_API_KEY=your-relay-api-key
+
+# OpenAI 兼容客户端
+export OPENAI_BASE_URL=http://localhost:3000/openai/v1
+export OPENAI_API_KEY=your-relay-api-key
 ```
 
-### 配置
+详细配置说明请参考 [客户端配置文档](#客户端配置)。
 
-1. 复制配置文件：
+## 项目架构
+
+本项目由两部分组成：
+
+### 1. **Relay Server** (`crates/`)
+
+基于 [claude-code-relay](https://github.com/wakaka6/claude-code-relay) 的 Rust 中转服务核心，包含：
+
+- `relay-core/` - 核心类型与 Trait 定义
+- `relay-claude/` - Claude 账户与转发实现
+- `relay-gemini/` - Gemini 账户与转发实现
+- `relay-codex/` - OpenAI Responses (Codex) 账户与转发实现
+- `relay-openai-to-anthropic/` - OpenAI 格式转换器
+- `relay-server/` - HTTP 服务器与路由
+
+**相较于原项目的修改**：
+- 添加了与 Tauri 的集成支持
+- 优化了日志输出格式
+- 增强了错误处理机制
+
+### 2. **Desktop Frontend** (`src/`, `src-tauri/`)
+
+基于 Tauri 的桌面应用界面：
+
+- **前端** (`src/`) - React + TypeScript + TailwindCSS
+  - 可视化配置管理
+  - 实时状态监控
+  - 日志查看
+  - 国际化支持
+
+- **后端** (`src-tauri/`) - Rust + Tauri
+  - 服务器进程管理
+  - 系统托盘集成
+  - 应用菜单（macOS）
+  - 配置文件管理
+  - 系统通知
+
+详细架构说明请参考 [ARCHITECTURE.md](./ARCHITECTURE.md)。
+
+## 开发指南
+
+### 前置要求
+
+- **Node.js** 18+
+- **Rust** 1.70+
+- **系统依赖**：
+  - macOS: Xcode Command Line Tools
+  - Windows: Visual Studio Build Tools
+  - Linux: webkit2gtk, libayatana-appindicator3-1
+
+### 开发环境设置
 
 ```bash
-cp config.example.toml config.toml
+# 1. 克隆仓库
+git clone https://github.com/YOUR_USERNAME/claude-code-relay.git
+cd claude-code-relay
+
+# 2. 安装依赖
+npm install
+
+# 3. 构建 relay-server（首次运行）
+npm run build:server
+
+# 4. 启动开发服务器
+npm run tauri:dev
 ```
 
-2. 编辑 `config.toml`，配置账户信息
+### 可用脚本
 
-### 运行
+- `npm run dev` - 启动前端开发服务器
+- `npm run build` - 构建前端生产版本
+- `npm run tauri:dev` - 启动 Tauri 开发模式
+- `npm run tauri:build` - 打包生产版本
+- `npm run build:server` - 构建 relay-server (debug)
+- `npm run build:server:release` - 构建 relay-server (release)
+
+详细开发指南请参考 [DEVELOPMENT.md](./DEVELOPMENT.md)。
+
+## 客户端配置
+
+### Claude Code CLI
 
 ```bash
-./target/release/cc-relay-server --config config.toml
+export ANTHROPIC_BASE_URL=http://localhost:3000
+export ANTHROPIC_API_KEY=your-relay-api-key
+claude
 ```
 
-## 配置说明
+### Gemini CLI
 
-### 服务器配置
-
-```toml
-[server]
-host = "127.0.0.1"      # 监听地址
-port = 3000             # 监听端口
-database_path = "data/relay.db"  # SQLite 数据库路径
-log_level = "info"      # 日志级别: trace, debug, info, warn, error
+```bash
+export GEMINI_API_BASE=http://localhost:3000/gemini
+export GEMINI_API_KEY=your-relay-api-key
+gemini
 ```
 
-### API Key 认证
+### OpenAI Codex CLI
 
-```toml
-# 留空则禁用认证
-api_keys = [
-    "your-api-key-1",
-    "your-api-key-2",
-]
+```bash
+export OPENAI_BASE_URL=http://localhost:3000/openai/v1
+export OPENAI_API_KEY=your-relay-api-key
+codex
 ```
 
-### 粘性会话配置
+### Cherry Studio / Cursor
 
-```toml
-[session]
-sticky_ttl_seconds = 3600           # 会话 TTL（默认1小时）
-renewal_threshold_seconds = 300      # 续期阈值（剩余5分钟时续期）
-```
+在设置中配置：
+- **API 地址**: `http://localhost:3000`
+- **API Key**: `your-relay-api-key`
 
-### 账户配置
-
-> **注意**: 你不需要配置所有类型的账户。只需配置你需要使用的平台即可。
->
-> - 只配置 Claude 账户：可以使用 Claude API 和 OpenAI 兼容端点
-> - 只配置 Gemini 账户：可以使用 Gemini API 端点
-> - 只配置 OpenAI Responses 账户：可以使用 OpenAI Responses 端点 (Codex CLI)
-> - 同时配置：可以使用所有端点
->
-> 未配置账户的端点在被调用时会返回"无可用账户"错误。
-
-#### Claude OAuth 账户
-
-```toml
-[[accounts]]
-type = "claude-oauth"
-id = "claude-1"
-name = "Claude OAuth Account"
-priority = 100                    # 优先级，数值越大优先级越高
-enabled = true
-refresh_token = "your-refresh-token"
-api_url = "https://api.anthropic.com"  # 可选：自定义 API URL
-```
-
-#### Claude API Key 账户
-
-```toml
-[[accounts]]
-type = "claude-api"
-id = "claude-api-1"
-name = "Claude API Account"
-priority = 90
-enabled = true
-api_key = "sk-ant-api03-xxxx"
-api_url = "https://api.anthropic.com"  # 可选：自定义 API URL
-```
-
-#### Gemini 账户
-
-```toml
-[[accounts]]
-type = "gemini"
-id = "gemini-1"
-name = "Gemini Account"
-priority = 100
-enabled = true
-refresh_token = "your-google-refresh-token"
-api_url = "https://cloudcode.googleapis.com"  # 可选：自定义 API URL
-```
-
-#### OpenAI Responses 账户 (Codex CLI)
-
-```toml
-[[accounts]]
-type = "openai-responses"
-id = "codex-1"
-name = "OpenAI Responses Account"
-priority = 100
-enabled = true
-api_key = "sk-your-openai-api-key"
-api_url = "https://api.openai.com/v1"  # 可选：自定义 API URL
-```
-
-### 代理配置
-
-每个账户支持独立的代理配置：
-
-#### SOCKS5 代理
-
-```toml
-[[accounts]]
-type = "claude-oauth"
-id = "claude-proxy"
-name = "Claude with SOCKS5 Proxy"
-priority = 50
-enabled = true
-refresh_token = "your-refresh-token"
-
-[accounts.proxy]
-type = "socks5"
-host = "127.0.0.1"
-port = 1080
-username = "user"    # 可选
-password = "pass"    # 可选
-```
-
-#### HTTP 代理
-
-```toml
-[[accounts]]
-type = "gemini"
-id = "gemini-proxy"
-name = "Gemini with HTTP Proxy"
-priority = 50
-enabled = true
-refresh_token = "your-refresh-token"
-
-[accounts.proxy]
-type = "http"
-host = "proxy.example.com"
-port = 8080
-username = "user"    # 可选
-password = "pass"    # 可选
-```
+更多客户端配置示例请查看原项目文档。
 
 ## API 端点
 
 ### Claude API
-
 ```
 POST /api/v1/messages          # Claude Messages API
 POST /claude/v1/messages       # 别名路由
@@ -220,317 +192,63 @@ GET  /api/v1/models            # 模型列表
 ```
 
 ### Gemini API
-
 ```
-POST /gemini/v1/models/:model:generateContent       # 标准生成
-POST /gemini/v1/models/:model:streamGenerateContent # 流式生成
-GET  /gemini/v1/models                              # 模型列表
+POST /gemini/v1/models/:model:generateContent
+POST /gemini/v1/models/:model:streamGenerateContent
+GET  /gemini/v1/models
 ```
 
 ### OpenAI 兼容
-
 ```
 POST /openai/v1/chat/completions   # OpenAI 格式转 Claude
-GET  /openai/v1/models             # 模型列表
-```
-
-### OpenAI Responses (Codex)
-
-```
-POST /openai/v1/responses          # OpenAI Responses API
-POST /v1/responses                 # 别名路由
+GET  /openai/v1/models
 ```
 
 ### 系统端点
-
 ```
 GET /health    # 健康检查
 GET /metrics   # 系统指标
 ```
 
-## 客户端配置
+## 跨平台支持
 
-### Claude Code CLI
+本应用已针对 Windows、macOS 和 Linux 进行了全面的跨平台适配。
 
-Claude Code 是 Anthropic 官方的命令行工具。
+详细的平台兼容性说明请参考：
+- [PLATFORM_COMPATIBILITY.md](./PLATFORM_COMPATIBILITY.md) - 跨平台特性说明
+- [NOTIFICATION_SETUP.md](./NOTIFICATION_SETUP.md) - macOS 通知设置指南
 
-**环境变量配置：**
+## 配置文件位置
 
-```bash
-# 设置 API 地址指向中转服务
-export ANTHROPIC_BASE_URL=http://localhost:3000
+应用配置文件默认位于：
 
-# 设置中转服务的 API Key（如果启用了认证）
-export ANTHROPIC_API_KEY=your-relay-api-key
+- **macOS**: `~/Library/Application Support/com.claude-relay.app/config.toml`
+- **Windows**: `%APPDATA%\com.claude-relay.app\config.toml`
+- **Linux**: `~/.config/claude-relay/config.toml`
 
-# 启动 Claude Code
-claude
-```
+日志文件位于应用数据目录的 `logs/` 子目录。
 
-**配置文件方式（~/.claude/settings.json）：**
+## 致谢
 
-```json
-{
-  "apiUrl": "http://localhost:3000",
-  "apiKey": "your-relay-api-key"
-}
-```
-
-**验证连接：**
-
-```bash
-# 检查连接状态
-curl http://localhost:3000/health
-
-# 测试 API 调用
-curl -X POST http://localhost:3000/api/v1/messages \
-  -H "Content-Type: application/json" \
-  -H "x-api-key: your-relay-api-key" \
-  -d '{
-    "model": "claude-sonnet-4-20250514",
-    "max_tokens": 100,
-    "messages": [{"role": "user", "content": "Hello"}]
-  }'
-```
-
-### Gemini CLI
-
-Gemini CLI 是 Google 的命令行工具。
-
-**环境变量配置：**
-
-```bash
-# 设置 API 地址指向中转服务
-export GEMINI_API_BASE=http://localhost:3000/gemini
-
-# 设置中转服务的 API Key
-export GEMINI_API_KEY=your-relay-api-key
-
-# 启动 Gemini CLI
-gemini
-```
-
-**验证连接：**
-
-```bash
-# 测试 API 调用
-curl -X POST "http://localhost:3000/gemini/v1/models/gemini-2.0-flash:generateContent" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer your-relay-api-key" \
-  -d '{
-    "contents": [{"parts": [{"text": "Hello"}]}]
-  }'
-```
-
-### OpenAI Codex CLI
-
-Codex CLI 支持两种模式：
-
-1. **OpenAI Responses API** (推荐) - 配置 `openai-responses` 账户，直接转发到 OpenAI
-2. **OpenAI 兼容模式** - 使用 Claude 账户，自动转换为 Claude 请求
-
-**使用 OpenAI Responses API (推荐)：**
-
-需要配置 `openai-responses` 账户，然后设置环境变量：
-
-```bash
-# 设置 API 地址指向中转服务
-export OPENAI_API_BASE=http://localhost:3000/openai/v1
-export OPENAI_BASE_URL=http://localhost:3000/openai/v1
-
-# 设置中转服务的 API Key
-export OPENAI_API_KEY=your-relay-api-key
-
-# 启动 Codex
-codex
-```
-
-**使用 OpenAI 兼容模式：**
-
-使用 Claude 账户，中转服务会自动转换请求格式。
-
-```bash
-# 设置 API 地址指向中转服务的 OpenAI 兼容端点
-export OPENAI_API_BASE=http://localhost:3000/openai/v1
-export OPENAI_BASE_URL=http://localhost:3000/openai/v1
-
-# 设置中转服务的 API Key
-export OPENAI_API_KEY=your-relay-api-key
-
-# 启动 Codex
-codex
-```
-
-**验证连接：**
-
-```bash
-# 测试 OpenAI Responses API
-curl -X POST http://localhost:3000/openai/v1/responses \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer your-relay-api-key" \
-  -d '{
-    "model": "gpt-4o",
-    "input": "Hello"
-  }'
-
-# 测试 OpenAI 兼容 API
-curl -X POST http://localhost:3000/openai/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer your-relay-api-key" \
-  -d '{
-    "model": "gpt-4o",
-    "messages": [{"role": "user", "content": "Hello"}]
-  }'
-```
-
-### Cherry Studio
-
-Cherry Studio 是一个支持多模型的桌面客户端。
-
-**配置步骤：**
-
-1. 打开设置 → 模型服务
-2. 添加自定义服务：
-
-   - **服务名称**: Claude Relay
-   - **API 地址**: `http://localhost:3000`
-   - **API Key**: `your-relay-api-key`
-   - **API 格式**: Claude (Anthropic)
-
-3. 或配置为 OpenAI 兼容：
-   - **API 地址**: `http://localhost:3000/openai/v1`
-   - **API 格式**: OpenAI
-
-### Cursor / VS Code 插件
-
-**Cursor 配置：**
-
-在设置中配置：
-
-- **OpenAI API Base**: `http://localhost:3000/openai/v1`
-- **OpenAI API Key**: `your-relay-api-key`
-
-**Continue.dev 插件配置（~/.continue/config.json）：**
-
-```json
-{
-  "models": [
-    {
-      "title": "Claude via Relay",
-      "provider": "anthropic",
-      "model": "claude-sonnet-4-20250514",
-      "apiBase": "http://localhost:3000",
-      "apiKey": "your-relay-api-key"
-    }
-  ]
-}
-```
-
-### 通用 HTTP 客户端
-
-**Python 示例：**
-
-```python
-import anthropic
-
-client = anthropic.Anthropic(
-    base_url="http://localhost:3000",
-    api_key="your-relay-api-key"
-)
-
-message = client.messages.create(
-    model="claude-sonnet-4-20250514",
-    max_tokens=1024,
-    messages=[{"role": "user", "content": "Hello, Claude!"}]
-)
-print(message.content)
-```
-
-**Node.js 示例：**
-
-```javascript
-import Anthropic from "@anthropic-ai/sdk";
-
-const client = new Anthropic({
-  baseURL: "http://localhost:3000",
-  apiKey: "your-relay-api-key",
-});
-
-const message = await client.messages.create({
-  model: "claude-sonnet-4-20250514",
-  max_tokens: 1024,
-  messages: [{ role: "user", content: "Hello, Claude!" }],
-});
-console.log(message.content);
-```
-
-### 模型映射说明
-
-使用 OpenAI 兼容端点时，模型名称直接传递给 Claude API：
-
-| 请求模型                   | 实际调用                    |
-| -------------------------- | --------------------------- |
-| `gpt-4o`                   | `gpt-4o`（Claude 后端处理） |
-| `claude-sonnet-4-20250514` | `claude-sonnet-4-20250514`  |
-| 任意模型名                 | 直接传递                    |
-
-## 部署
-
-### Systemd 服务
-
-项目提供了 systemd 服务文件，可用于在 Linux 系统上部署为后台服务。
-
-**1. 创建用户和目录：**
-
-```bash
-sudo useradd -r -s /bin/false cc-relay
-sudo mkdir -p /opt/cc-relay/data
-sudo chown -R cc-relay:cc-relay /opt/cc-relay
-```
-
-**2. 复制文件：**
-
-```bash
-sudo cp target/release/cc-relay-server /opt/cc-relay/
-sudo cp config.toml /opt/cc-relay/
-sudo cp cc-relay-server.service /etc/systemd/system/
-```
-
-**3. 启动服务：**
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable cc-relay-server
-sudo systemctl start cc-relay-server
-```
-
-**4. 查看状态和日志：**
-
-```bash
-sudo systemctl status cc-relay-server
-sudo journalctl -u cc-relay-server -f
-```
-
-## 开发
-
-### 运行测试
-
-```bash
-cargo test
-```
-
-### 代码检查
-
-```bash
-cargo clippy
-```
-
-### 格式化
-
-```bash
-cargo fmt
-```
+- [wakaka6/claude-code-relay](https://github.com/wakaka6/claude-code-relay) - 原始 Relay Server 实现
+- [Tauri](https://tauri.app/) - 跨平台桌面应用框架
+- [shadcn/ui](https://ui.shadcn.com/) - UI 组件库
 
 ## License
 
-MIT
+MIT License - 详见 [LICENSE](./LICENSE) 文件
+
+## 贡献
+
+欢迎提交 Issue 和 Pull Request！
+
+如果你在使用过程中遇到问题，请：
+1. 查看 [常见问题](./docs/FAQ.md)（如果有）
+2. 搜索现有 [Issues](../../issues)
+3. 创建新的 Issue 并提供详细信息
+
+## 相关链接
+
+- [原项目仓库](https://github.com/wakaka6/claude-code-relay)
+- [Tauri 文档](https://tauri.app/)
+- [Claude API 文档](https://docs.anthropic.com/)

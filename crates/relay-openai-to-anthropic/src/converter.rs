@@ -191,7 +191,7 @@ impl OpenAIToClaudeConverter {
                         },
                     });
                 }
-                ContentBlock::Unknown => {}
+                ContentBlock::Unknown(_) => {}
             }
         }
 

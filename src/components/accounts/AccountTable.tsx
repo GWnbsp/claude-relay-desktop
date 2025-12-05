@@ -3,6 +3,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { AccountSummary } from '@/services/api'
 import { Pencil, Trash2 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 
 interface Props {
   accounts: AccountSummary[]
@@ -17,11 +18,13 @@ const platformLabel: Record<string, string> = {
 }
 
 export function AccountTable({ accounts, onEdit, onDelete }: Props) {
+  const { t } = useTranslation()
+
   if (!accounts.length) {
     return (
       <Card>
         <CardContent className="py-10 text-center text-muted-foreground">
-          暂无配置的账户
+          {t('accountTable.noAccounts')}
         </CardContent>
       </Card>
     )
@@ -32,12 +35,12 @@ export function AccountTable({ accounts, onEdit, onDelete }: Props) {
       <table className="min-w-full divide-y divide-border">
         <thead className="bg-muted/50">
           <tr>
-            <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase">名称</th>
-            <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase">类型</th>
-            <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase">平台</th>
-            <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase">优先级</th>
-            <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase">启用</th>
-            <th className="px-4 py-2 text-right text-xs font-medium text-muted-foreground uppercase">操作</th>
+            <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase">{t('accountTable.name')}</th>
+            <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase">{t('accountTable.type')}</th>
+            <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase">{t('accountTable.platform')}</th>
+            <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase">{t('accountTable.priority')}</th>
+            <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase">{t('accountTable.status')}</th>
+            <th className="px-4 py-2 text-right text-xs font-medium text-muted-foreground uppercase">{t('accountTable.actions')}</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-border bg-background">
@@ -49,7 +52,7 @@ export function AccountTable({ accounts, onEdit, onDelete }: Props) {
               <td className="px-4 py-2 text-sm text-muted-foreground">{acc.priority}</td>
               <td className="px-4 py-2 text-sm">
                 <Badge variant={acc.enabled ? 'success' : 'secondary'}>
-                  {acc.enabled ? '启用' : '禁用'}
+                  {acc.enabled ? t('accountTable.enabled') : t('accountTable.disabled')}
                 </Badge>
               </td>
               <td className="px-4 py-2 text-sm">
@@ -60,7 +63,7 @@ export function AccountTable({ accounts, onEdit, onDelete }: Props) {
                       size="sm"
                       onClick={() => onEdit(acc)}
                       className="h-8 w-8 p-0"
-                      title="编辑账户"
+                      title={t('accountTable.editTooltip')}
                     >
                       <Pencil className="h-4 w-4" />
                     </Button>
@@ -70,12 +73,12 @@ export function AccountTable({ accounts, onEdit, onDelete }: Props) {
                       variant="ghost"
                       size="sm"
                       onClick={() => {
-                        if (confirm(`确定要删除账户 "${acc.name}" 吗？`)) {
+                        if (confirm(t('accountTable.confirmDelete', { name: acc.name }))) {
                           onDelete(acc.id)
                         }
                       }}
                       className="h-8 w-8 p-0 hover:text-destructive"
-                      title="删除账户"
+                      title={t('accountTable.deleteTooltip')}
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>

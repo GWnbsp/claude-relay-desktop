@@ -3,9 +3,11 @@ use crate::logger::LogManager;
 use std::path::PathBuf;
 use std::process::Stdio;
 use tauri::{AppHandle, Manager};
-use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::io::BufReader;
 use tokio::process::{Child, Command};
 use tokio::task::JoinHandle;
+use tokio::net::TcpListener;
+use tokio::time::{sleep, Duration};
 
 pub struct ServerHandle {
     child: Child,
@@ -98,6 +100,32 @@ fn resolve_binary(app: &AppHandle) -> Option<PathBuf> {
     None
 }
 
+/// 检查端口是否可用
+async fn is_port_available(port: u16) -> bool {
+    TcpListener::bind(format!("127.0.0.1:{}", port))
+        .await
+        .is_ok()
+}
+
+/// 等待端口被占用（服务启动）
+async fn wait_for_port_listening(port: u16, max_wait_secs: u64) -> Result<(), String> {
+    let check_interval = Duration::from_millis(100);
+    let max_attempts = (max_wait_secs * 1000) / 100;
+
+    for attempt in 0..max_attempts {
+        // 尝试连接端口，如果失败说明还没启动
+        if tokio::net::TcpStream::connect(format!("127.0.0.1:{}", port)).await.is_ok() {
+            return Ok(());
+        }
+
+        if attempt < max_attempts - 1 {
+            sleep(check_interval).await;
+        }
+    }
+
+    Err(format!("Server did not start listening on port {} within {} seconds", port, max_wait_secs))
+}
+
 impl ServerHandle {
     pub async fn start(
         app: &AppHandle,
@@ -110,6 +138,16 @@ impl ServerHandle {
         let config = Config::load(&config_path)
             .map_err(|e| format!("Failed to load config: {}", e))?;
         let port = port_hint.unwrap_or(config.server.port);
+
+        // 检查端口是否已被占用
+        if !is_port_available(port).await {
+            let err_msg = format!(
+                "Port {} is already in use. Please check if another cc-relay-server instance is running, or change the port in config.",
+                port
+            );
+            log_manager.log(err_msg.clone());
+            return Err(err_msg);
+        }
 
         let bin_path = resolve_binary(app).ok_or_else(|| "cc-relay-server not found; ensure packaged externalBin or set CC_RELAY_BIN_PATH".to_string())?;
 
@@ -183,25 +221,93 @@ impl ServerHandle {
             log_tasks.push(task);
         }
 
-        log_manager.log("Server process started successfully".to_string());
+        log_manager.log("Server process spawned, waiting for port to be ready...".to_string());
+
+        // 等待服务器真正启动并监听端口（最多等待 10 秒）
+        // 这样可以检测到启动失败的情况（例如配置错误、权限问题等）
+        match wait_for_port_listening(port, 10).await {
+            Ok(_) => {
+                log_manager.log(format!("Server successfully started and listening on port {}", port));
+            }
+            Err(e) => {
+                // 服务启动失败，尝试杀死子进程并清理
+                let err_msg = format!("Server process started but failed to listen on port: {}", e);
+                log_manager.log(err_msg.clone());
+
+                // 尝试杀死进程
+                let _ = child.kill().await;
+
+                // 中止日志任务
+                for task in log_tasks {
+                    task.abort();
+                }
+
+                return Err(err_msg);
+            }
+        }
 
         Ok(ServerHandle { child, port, log_tasks })
     }
 
-    pub async fn stop(self) {
-        let mut child = self.child;
-        let log_tasks = self.log_tasks;
+    pub async fn stop(mut self) {
+        use tokio::time::{timeout, Duration};
 
-        // 尝试优雅退出（向进程发送终止信号）
-        let _ = child.kill().await;
+        eprintln!("[ServerHandle::stop] Stopping server (PID: {:?})", self.child.id());
 
-        // 等待日志读取任务完成
-        for task in log_tasks {
-            let _ = task.await;
+        // 第一步：发送 kill 信号
+        if let Err(e) = self.child.kill().await {
+            eprintln!("[ServerHandle::stop] Failed to kill process: {}", e);
+        } else {
+            eprintln!("[ServerHandle::stop] Kill signal sent");
         }
+
+        // 第二步：等待进程真正退出（最多等待 5 秒）
+        match timeout(Duration::from_secs(5), self.child.wait()).await {
+            Ok(Ok(status)) => {
+                eprintln!("[ServerHandle::stop] Process exited with status: {:?}", status);
+            }
+            Ok(Err(e)) => {
+                eprintln!("[ServerHandle::stop] Failed to wait for process: {}", e);
+            }
+            Err(_) => {
+                eprintln!("[ServerHandle::stop] Timeout waiting for process to exit");
+                eprintln!("[ServerHandle::stop] Process may still be running - manual cleanup may be required");
+            }
+        }
+
+        // 第三步：中止日志任务（不再等待它们完成）
+        eprintln!("[ServerHandle::stop] Aborting {} log tasks", self.log_tasks.len());
+        for task in &self.log_tasks {
+            task.abort();
+        }
+
+        eprintln!("[ServerHandle::stop] Stop completed");
     }
 
     pub fn port(&self) -> u16 {
         self.port
+    }
+}
+
+impl Drop for ServerHandle {
+    fn drop(&mut self) {
+        eprintln!("[ServerHandle::drop] Cleaning up server process (PID: {:?})", self.child.id());
+
+        // 尝试 kill 子进程
+        match self.child.start_kill() {
+            Ok(_) => {
+                eprintln!("[ServerHandle::drop] Kill signal sent successfully");
+            }
+            Err(e) => {
+                eprintln!("[ServerHandle::drop] Failed to kill process: {}", e);
+            }
+        }
+
+        // 中止所有日志任务
+        for task in &self.log_tasks {
+            task.abort();
+        }
+
+        eprintln!("[ServerHandle::drop] Cleanup completed");
     }
 }

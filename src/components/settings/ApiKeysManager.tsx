@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Plus, Trash2, Key } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 
 interface Props {
   apiKeys: string[]
@@ -9,12 +10,13 @@ interface Props {
 }
 
 export function ApiKeysManager({ apiKeys, onChange }: Props) {
+  const { t } = useTranslation()
   const [newKey, setNewKey] = useState('')
 
   const handleAdd = () => {
     if (!newKey.trim()) return
     if (apiKeys.includes(newKey.trim())) {
-      alert('该 API Key 已存在')
+      alert(t('apiKeysManager.keyExists'))
       return
     }
     onChange([...apiKeys, newKey.trim()])
@@ -30,10 +32,10 @@ export function ApiKeysManager({ apiKeys, onChange }: Props) {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Key className="h-5 w-5" />
-          API Keys 管理
+          {t('apiKeysManager.title')}
         </CardTitle>
         <p className="text-sm text-muted-foreground">
-          配置客户端访问服务器时需要的 API Keys（留空表示不启用认证）
+          {t('apiKeysManager.description')}
         </p>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -42,7 +44,7 @@ export function ApiKeysManager({ apiKeys, onChange }: Props) {
           <input
             type="text"
             className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
-            placeholder="输入新的 API Key"
+            placeholder={t('apiKeysManager.inputPlaceholder')}
             value={newKey}
             onChange={(e) => setNewKey(e.target.value)}
             onKeyDown={(e) => {
@@ -51,14 +53,14 @@ export function ApiKeysManager({ apiKeys, onChange }: Props) {
           />
           <Button onClick={handleAdd} disabled={!newKey.trim()}>
             <Plus className="mr-2 h-4 w-4" />
-            添加
+            {t('apiKeysManager.add')}
           </Button>
         </div>
 
         {/* Keys 列表 */}
         {apiKeys.length > 0 ? (
           <div className="space-y-2">
-            <p className="text-sm font-medium">已配置的 API Keys ({apiKeys.length})</p>
+            <p className="text-sm font-medium">{t('apiKeysManager.configuredKeys', { count: apiKeys.length })}</p>
             <div className="space-y-1">
               {apiKeys.map((key, index) => (
                 <div
@@ -82,7 +84,7 @@ export function ApiKeysManager({ apiKeys, onChange }: Props) {
           </div>
         ) : (
           <div className="text-center py-8 text-sm text-muted-foreground">
-            未配置 API Keys - 服务器将不启用认证
+            {t('apiKeysManager.noKeys')}
           </div>
         )}
       </CardContent>

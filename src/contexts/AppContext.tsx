@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import { TauriAPI, ServerStatus, AccountSummary } from '@/services/api'
 import { Config, ConfigManager } from '@/services/config'
+import { listen } from '@tauri-apps/api/event'
 
 interface AppState {
   serverStatus: ServerStatus
@@ -14,6 +15,7 @@ interface AppActions {
   refreshStatus: () => Promise<void>
   startServer: () => Promise<void>
   stopServer: () => Promise<void>
+  restartServer: () => Promise<void>
   loadConfig: () => Promise<void>
   saveConfig: (config: Config) => Promise<void>
   loadAccounts: () => Promise<void>
@@ -70,6 +72,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     await refreshStatus()
   }
 
+  const restartServer = async () => {
+    await TauriAPI.restartServer()
+    await refreshStatus()
+  }
+
   const loadAccounts = async () => {
     try {
       const accounts = await TauriAPI.getAccountModels()
@@ -83,6 +90,29 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     refreshStatus()
     loadConfig()
     loadAccounts()
+
+    // 监听来自托盘和应用菜单的事件
+    const unlistenPromises = [
+      listen('tray-start-server', () => {
+        console.log('Received tray-start-server event')
+        startServer()
+      }),
+      listen('tray-stop-server', () => {
+        console.log('Received tray-stop-server event')
+        stopServer()
+      }),
+      listen('tray-restart-server', () => {
+        console.log('Received tray-restart-server event')
+        restartServer()
+      }),
+    ]
+
+    // 清理监听器
+    return () => {
+      Promise.all(unlistenPromises).then((unlisteners) => {
+        unlisteners.forEach((unlisten) => unlisten())
+      })
+    }
   }, [])
 
   const value = useMemo<AppContextType>(
@@ -92,6 +122,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         refreshStatus,
         startServer,
         stopServer,
+        restartServer,
         loadConfig,
         saveConfig,
         loadAccounts,

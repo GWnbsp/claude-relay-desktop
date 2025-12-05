@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { AlertTriangle, CheckCircle2 } from 'lucide-react'
 import { ConfigManager } from '@/services/config'
+import { useTranslation } from 'react-i18next'
 
 interface Props {
   open: boolean
@@ -12,6 +13,7 @@ interface Props {
 }
 
 export function AdvancedEditDialog({ open, onClose, onSave, initialValue }: Props) {
+  const { t } = useTranslation()
   const [configText, setConfigText] = useState(initialValue)
   const [errors, setErrors] = useState<string[]>([])
   const [validationSuccess, setValidationSuccess] = useState(false)
@@ -45,7 +47,7 @@ export function AdvancedEditDialog({ open, onClose, onSave, initialValue }: Prop
         return false
       }
     } catch (e) {
-      setErrors(['TOML 格式错误: ' + (e as Error).message])
+      setErrors([t('settings.tomlError') + (e as Error).message])
       setValidationSuccess(false)
       return false
     }
@@ -59,15 +61,16 @@ export function AdvancedEditDialog({ open, onClose, onSave, initialValue }: Prop
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <Card className="w-full max-w-4xl max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 overflow-y-auto">
+      <div className="w-full max-w-4xl my-auto">
+        <Card className="w-full max-h-[90vh] flex flex-col">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <AlertTriangle className="h-5 w-5 text-yellow-500" />
-            高级编辑模式
+            {t('settings.advancedMode')}
           </CardTitle>
           <p className="text-sm text-muted-foreground">
-            直接编辑 TOML 配置文件。错误的配置可能导致服务无法启动。
+            {t('settings.advancedWarning')}
           </p>
         </CardHeader>
         <CardContent className="flex-1 flex flex-col gap-4 overflow-hidden">
@@ -83,7 +86,7 @@ export function AdvancedEditDialog({ open, onClose, onSave, initialValue }: Prop
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
                 <p className="text-sm font-medium text-green-600 dark:text-green-400">
-                  配置验证通过！格式正确，可以安全保存。
+                  {t('settings.validationSuccess')}
                 </p>
               </div>
             </div>
@@ -91,7 +94,7 @@ export function AdvancedEditDialog({ open, onClose, onSave, initialValue }: Prop
 
           {errors.length > 0 && (
             <div className="rounded-md bg-destructive/10 border border-destructive/20 p-3">
-              <p className="text-sm font-medium text-destructive mb-2">配置验证失败：</p>
+              <p className="text-sm font-medium text-destructive mb-2">{t('settings.validationFailed')}</p>
               <ul className="list-disc list-inside space-y-1">
                 {errors.map((err, i) => (
                   <li key={i} className="text-sm text-destructive">{err}</li>
@@ -101,12 +104,13 @@ export function AdvancedEditDialog({ open, onClose, onSave, initialValue }: Prop
           )}
 
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={onClose}>取消</Button>
-            <Button variant="outline" onClick={handleValidate}>验证配置</Button>
-            <Button onClick={handleSave}>保存</Button>
+            <Button variant="outline" onClick={onClose}>{t('button.cancel')}</Button>
+            <Button variant="outline" onClick={handleValidate}>{t('settings.validate')}</Button>
+            <Button onClick={handleSave}>{t('button.save')}</Button>
           </div>
         </CardContent>
       </Card>
+      </div>
     </div>
   )
 }
