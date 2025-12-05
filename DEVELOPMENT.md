@@ -55,8 +55,8 @@ sudo dnf install \
 ### 1. 克隆仓库
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/claude-code-relay.git
-cd claude-code-relay
+git clone https://github.com/GWnbsp/claude-relay-desktop.git
+cd claude-relay-desktop
 ```
 
 ### 2. 安装依赖
