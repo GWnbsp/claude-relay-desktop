@@ -2,21 +2,23 @@ use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 use tauri::State;
 
-use crate::{config::Config, server::ServerHandle};
+use crate::{config::Config, logger::LogManager, server::ServerHandle};
 
 /// 应用全局状态
 pub struct AppState {
     pub server_handle: Mutex<Option<ServerHandle>>,
     pub server_port: Mutex<Option<u16>>,
     pub config_path: Mutex<String>,
+    pub log_manager: LogManager,
 }
 
 impl AppState {
-    pub fn new(config_path: String) -> Self {
+    pub fn new(config_path: String, log_manager: LogManager) -> Self {
         Self {
             server_handle: Mutex::new(None),
             server_port: Mutex::new(None),
             config_path: Mutex::new(config_path),
+            log_manager,
         }
     }
 }
@@ -50,14 +52,20 @@ pub struct AccountSummary {
 #[tauri::command]
 pub async fn start_server(state: State<'_, AppState>, app: tauri::AppHandle) -> Result<u16, String> {
     let config_path = state.config_path.lock().unwrap().clone();
+    let log_manager = state.log_manager.clone();
+
+    // 记录启动日志
+    log_manager.log("User requested server start".to_string());
 
     // 启动服务
-    let handle = ServerHandle::start(&app, config_path, None).await?;
+    let handle = ServerHandle::start(&app, config_path, None, log_manager, app.clone()).await?;
     let port = handle.port();
 
     // 保存状态
     *state.server_port.lock().unwrap() = Some(port);
     *state.server_handle.lock().unwrap() = Some(handle);
+
+    state.log_manager.log(format!("Server started on port {}", port));
 
     Ok(port)
 }
@@ -65,6 +73,8 @@ pub async fn start_server(state: State<'_, AppState>, app: tauri::AppHandle) -> 
 /// 停止服务器
 #[tauri::command]
 pub async fn stop_server(state: State<'_, AppState>) -> Result<(), String> {
+    state.log_manager.log("User requested server stop".to_string());
+
     let handle_opt = {
         let mut guard = state.server_handle.lock().unwrap();
         guard.take()
@@ -72,6 +82,9 @@ pub async fn stop_server(state: State<'_, AppState>) -> Result<(), String> {
 
     if let Some(handle) = handle_opt {
         handle.stop().await;
+        state.log_manager.log("Server stopped successfully".to_string());
+    } else {
+        state.log_manager.log("No server running to stop".to_string());
     }
     *state.server_port.lock().unwrap() = None;
     Ok(())
@@ -151,55 +164,96 @@ pub async fn get_account_models(state: State<'_, AppState>) -> Result<Vec<Accoun
     let path = state.config_path.lock().unwrap().clone();
     let config = Config::load(&path).map_err(|e| format!("Failed to load config: {}", e))?;
 
+    eprintln!("[get_account_models] Found {} accounts", config.accounts.len());
+
     let accounts = config
         .accounts
         .iter()
-        .map(|acc| match acc {
-            crate::config::AccountConfig::ClaudeOauth { id, name, priority, enabled, .. } => AccountSummary {
-                id: id.clone(),
-                name: name.clone(),
-                account_type: "claude-oauth".to_string(),
-                platform: "claude".to_string(),
-                priority: *priority,
-                enabled: *enabled,
-            },
-            crate::config::AccountConfig::ClaudeApi { id, name, priority, enabled, .. } => AccountSummary {
-                id: id.clone(),
-                name: name.clone(),
-                account_type: "claude-api".to_string(),
-                platform: "claude".to_string(),
-                priority: *priority,
-                enabled: *enabled,
-            },
-            crate::config::AccountConfig::Gemini { id, name, priority, enabled, .. } => AccountSummary {
-                id: id.clone(),
-                name: name.clone(),
-                account_type: "gemini".to_string(),
-                platform: "gemini".to_string(),
-                priority: *priority,
-                enabled: *enabled,
-            },
-            crate::config::AccountConfig::OpenaiResponses { id, name, priority, enabled, .. } => AccountSummary {
-                id: id.clone(),
-                name: name.clone(),
-                account_type: "openai-responses".to_string(),
-                platform: "codex".to_string(),
-                priority: *priority,
-                enabled: *enabled,
-            },
+        .enumerate()
+        .map(|(idx, acc)| {
+            let summary = match acc {
+                crate::config::AccountConfig::ClaudeOauth { id, name, priority, enabled, .. } => AccountSummary {
+                    id: id.clone(),
+                    name: name.clone(),
+                    account_type: "claude-oauth".to_string(),
+                    platform: "claude".to_string(),
+                    priority: *priority,
+                    enabled: *enabled,
+                },
+                crate::config::AccountConfig::ClaudeApi { id, name, priority, enabled, .. } => AccountSummary {
+                    id: id.clone(),
+                    name: name.clone(),
+                    account_type: "claude-api".to_string(),
+                    platform: "claude".to_string(),
+                    priority: *priority,
+                    enabled: *enabled,
+                },
+                crate::config::AccountConfig::Gemini { id, name, priority, enabled, .. } => AccountSummary {
+                    id: id.clone(),
+                    name: name.clone(),
+                    account_type: "gemini".to_string(),
+                    platform: "gemini".to_string(),
+                    priority: *priority,
+                    enabled: *enabled,
+                },
+                crate::config::AccountConfig::OpenaiResponses { id, name, priority, enabled, .. } => AccountSummary {
+                    id: id.clone(),
+                    name: name.clone(),
+                    account_type: "openai-responses".to_string(),
+                    platform: "codex".to_string(),
+                    priority: *priority,
+                    enabled: *enabled,
+                },
+            };
+            eprintln!("[get_account_models] Account {}: id='{}', name='{}', type='{}'",
+                idx, summary.id, summary.name, summary.account_type);
+            summary
         })
         .collect();
 
     Ok(accounts)
 }
 
-/// 简单返回最近日志占位（未来可改为文件 tail）
+/// 获取最近的日志
 #[tauri::command]
-pub async fn tail_logs() -> Result<Vec<String>, String> {
-    Ok(vec![
-        "[log] 功能待实现".to_string(),
-        "如果需要实时日志，请在 Tauri 后端接入文件 tail".to_string(),
-    ])
+pub async fn tail_logs(state: State<'_, AppState>, count: Option<usize>) -> Result<Vec<String>, String> {
+    let count = count.unwrap_or(100);
+    Ok(state.log_manager.get_recent_logs(count))
+}
+
+/// 清空日志缓冲区
+#[tauri::command]
+pub async fn clear_logs(state: State<'_, AppState>) -> Result<(), String> {
+    state.log_manager.clear();
+    state.log_manager.log("Logs cleared by user".to_string());
+    Ok(())
+}
+
+/// 仪表盘统计数据（仅从配置文件读取）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DashboardStats {
+    pub active_accounts: i64,
+    pub total_accounts: i64,
+}
+
+/// 获取仪表盘统计数据
+#[tauri::command]
+pub async fn get_dashboard_stats(state: State<'_, AppState>) -> Result<DashboardStats, String> {
+    let config_path = state.config_path.lock().unwrap().clone();
+    let config = Config::load(&config_path).map_err(|e| format!("Failed to load config: {}", e))?;
+
+    let total_accounts = config.accounts.len() as i64;
+    let active_accounts = config.accounts.iter().filter(|acc| match acc {
+        crate::config::AccountConfig::ClaudeOauth { enabled, .. } => *enabled,
+        crate::config::AccountConfig::ClaudeApi { enabled, .. } => *enabled,
+        crate::config::AccountConfig::Gemini { enabled, .. } => *enabled,
+        crate::config::AccountConfig::OpenaiResponses { enabled, .. } => *enabled,
+    }).count() as i64;
+
+    Ok(DashboardStats {
+        active_accounts,
+        total_accounts,
+    })
 }
 
 fn load_or_create_config(path: &str) -> Result<String, String> {

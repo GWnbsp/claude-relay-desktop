@@ -3,9 +3,11 @@
 
 mod commands;
 mod config;
+mod logger;
 mod server;
 
 use commands::AppState;
+use logger::LogManager;
 use std::path::PathBuf;
 use tauri::Manager;
 
@@ -39,8 +41,19 @@ fn main() {
             let config_path = get_default_config_path(app);
             println!("Using config file: {}", config_path);
 
+            // 获取日志文件路径（在应用数据目录）
+            let log_file_path = app
+                .path_resolver()
+                .app_data_dir()
+                .map(|dir| dir.join("logs").join("app.log"));
+
+            // 创建日志管理器（保留最近 1000 条日志）
+            let log_manager = LogManager::new(1000, log_file_path);
+            log_manager.log("Application started".to_string());
+            log_manager.log(format!("Config path: {}", config_path));
+
             // 初始化应用状态
-            app.manage(AppState::new(config_path));
+            app.manage(AppState::new(config_path, log_manager));
 
             Ok(())
         })
@@ -55,6 +68,8 @@ fn main() {
             commands::validate_config,
             commands::get_account_models,
             commands::tail_logs,
+            commands::clear_logs,
+            commands::get_dashboard_stats,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

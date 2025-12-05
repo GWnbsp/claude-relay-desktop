@@ -65,6 +65,7 @@ export function Settings() {
     const configText = ConfigManager.stringify(updated)
     await TauriAPI.writeConfig(configText)
     await actions.loadConfig()
+    await actions.loadAccounts() // 刷新账户列表
     setSaving(false)
   }
 
@@ -76,6 +77,7 @@ export function Settings() {
     setSaving(true)
     await TauriAPI.writeConfig(configText)
     await actions.loadConfig()
+    await actions.loadAccounts() // 刷新账户列表
     setSaving(false)
   }
 
