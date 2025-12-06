@@ -6,7 +6,9 @@ mod app_settings;
 mod commands;
 mod config;
 mod logger;
+mod port_utils;
 mod server;
+mod stats;
 mod tray;
 
 use app_settings::AppSettings;
@@ -147,6 +149,12 @@ fn main() {
             commands::get_dashboard_stats,
             commands::get_app_settings,
             commands::update_app_settings,
+            commands::check_port_conflict,
+            commands::kill_process_by_pid,
+            stats::get_usage_stats,
+            stats::get_account_usage_detail,
+            stats::get_database_info,
+            stats::cleanup_old_stats,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

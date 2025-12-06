@@ -6,6 +6,7 @@
   "nav": {
     "dashboard": "Dashboard",
     "accounts": "Accounts",
+    "usage": "Usage Stats",
     "settings": "Settings",
     "logs": "Logs"
   },
@@ -105,6 +106,8 @@
     "stickyTtlDesc": "Duration for the same session to keep using the same account",
     "renewalThreshold": "Renewal Threshold (seconds)",
     "renewalThresholdDesc": "Automatically renew when session remaining time is below this value",
+    "unavailableCooldown": "Unavailable Cooldown (seconds)",
+    "unavailableCooldownDesc": "Cooldown duration before retrying an unavailable account",
     "save": "Save Configuration",
     "saving": "Saving...",
     "appSettings": "Application Settings",
@@ -180,6 +183,26 @@
     "loading": "Loading...",
     "saved": "Saved",
     "deleted": "Deleted"
+  },
+  "usageStats": {
+    "title": "Usage Statistics",
+    "subtitle": "Monitor token usage across accounts",
+    "timeRange": "Time Range",
+    "days": "days",
+    "databaseInfo": "Database Info",
+    "dbPath": "Path",
+    "dbSize": "Size",
+    "dbStatus": "Status",
+    "dbExists": "OK",
+    "dbNotFound": "Not Found",
+    "totalTokens": "Total Tokens",
+    "inputTokens": "Input Tokens",
+    "outputTokens": "Output Tokens",
+    "requests": "Requests",
+    "input": "Input",
+    "output": "Output",
+    "noData": "No usage data available",
+    "export": "Export CSV"
   },
   "server": {
     "startSuccess": "Server started successfully",

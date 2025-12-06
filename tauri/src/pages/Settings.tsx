@@ -27,6 +27,7 @@ export function Settings() {
   const [logLevel, setLogLevel] = useState('info')
   const [stickyTtl, setStickyTtl] = useState(3600)
   const [renewalThreshold, setRenewalThreshold] = useState(300)
+  const [unavailableCooldown, setUnavailableCooldown] = useState(3600)
 
   // App settings state
   const [autostartOnBoot, setAutostartOnBoot] = useState(false)
@@ -65,6 +66,7 @@ export function Settings() {
       setLogLevel(state.config.server.log_level)
       setStickyTtl(state.config.session.sticky_ttl_seconds)
       setRenewalThreshold(state.config.session.renewal_threshold_seconds)
+      setUnavailableCooldown(state.config.session.unavailable_cooldown_seconds || 3600)
     }
   }, [state.config])
 
@@ -81,6 +83,7 @@ export function Settings() {
       session: {
         sticky_ttl_seconds: stickyTtl,
         renewal_threshold_seconds: renewalThreshold,
+        unavailable_cooldown_seconds: unavailableCooldown,
       },
     }
   }
@@ -405,6 +408,22 @@ export function Settings() {
                       min={0}
                     />
                     <p className="mt-1 text-xs text-muted-foreground">{t('settings.renewalThresholdDesc')}</p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <div className="w-32">
+                    <label className="text-sm text-muted-foreground">{t('settings.unavailableCooldown')}</label>
+                  </div>
+                  <div className="flex-1">
+                    <input
+                      type="number"
+                      className="w-32 rounded-md border border-input bg-background px-3 py-1.5 text-sm"
+                      value={unavailableCooldown}
+                      onChange={(e) => setUnavailableCooldown(Number(e.target.value))}
+                      min={0}
+                    />
+                    <p className="mt-1 text-xs text-muted-foreground">{t('settings.unavailableCooldownDesc')}</p>
                   </div>
                 </div>
               </div>

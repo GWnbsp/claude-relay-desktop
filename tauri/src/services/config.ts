@@ -34,6 +34,7 @@ export interface Config {
   session: {
     sticky_ttl_seconds: number
     renewal_threshold_seconds: number
+    unavailable_cooldown_seconds: number
   }
 }
 
@@ -147,6 +148,9 @@ export class ConfigManager {
       }
       if (typeof config.session.renewal_threshold_seconds !== 'number' || config.session.renewal_threshold_seconds < 0) {
         errors.push('session.renewal_threshold_seconds 必须是非负数')
+      }
+      if (typeof config.session.unavailable_cooldown_seconds !== 'number' || config.session.unavailable_cooldown_seconds < 0) {
+        errors.push('session.unavailable_cooldown_seconds 必须是非负数')
       }
     }
 

@@ -106,6 +106,8 @@ pub struct SessionConfig {
     pub sticky_ttl_seconds: u64,
     #[serde(default = "default_renewal_threshold")]
     pub renewal_threshold_seconds: u64,
+    #[serde(default = "default_unavailable_cooldown")]
+    pub unavailable_cooldown_seconds: u64,
 }
 
 fn default_sticky_ttl() -> u64 {
@@ -113,6 +115,9 @@ fn default_sticky_ttl() -> u64 {
 }
 fn default_renewal_threshold() -> u64 {
     300
+}
+fn default_unavailable_cooldown() -> u64 {
+    3600
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -152,5 +157,81 @@ impl Config {
 
     pub fn load_from_str(content: &str) -> Result<Self, String> {
         toml::from_str::<Config>(content).map_err(|e| format!("Config parse error: {}", e))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_v0_1_0_config_compatibility() {
+        // Test that configs without unavailable_cooldown_seconds (v0.1.0 format)
+        // can still be parsed with default value
+        let config_v1 = r#"
+[server]
+host = "127.0.0.1"
+port = 3000
+database_path = "data/relay.db"
+log_level = "info"
+
+api_keys = []
+
+[session]
+sticky_ttl_seconds = 3600
+renewal_threshold_seconds = 300
+
+[[accounts]]
+type = "claude-oauth"
+id = "test-1"
+name = "Test Account"
+priority = 100
+enabled = true
+refresh_token = "test_token"
+"#;
+
+        let result = Config::load_from_str(config_v1);
+        assert!(result.is_ok(), "v0.1.0 config should parse successfully");
+
+        let config = result.unwrap();
+        assert_eq!(config.session.sticky_ttl_seconds, 3600);
+        assert_eq!(config.session.renewal_threshold_seconds, 300);
+        assert_eq!(config.session.unavailable_cooldown_seconds, 3600, "Should use default value");
+    }
+
+    #[test]
+    fn test_v0_2_2_config_compatibility() {
+        // Test that configs with unavailable_cooldown_seconds (v0.2.2 format)
+        // parse correctly with the specified value
+        let config_v2 = r#"
+[server]
+host = "127.0.0.1"
+port = 3000
+database_path = "data/relay.db"
+log_level = "info"
+
+api_keys = []
+
+[session]
+sticky_ttl_seconds = 3600
+renewal_threshold_seconds = 300
+unavailable_cooldown_seconds = 7200
+
+[[accounts]]
+type = "claude-oauth"
+id = "test-1"
+name = "Test Account"
+priority = 100
+enabled = true
+refresh_token = "test_token"
+"#;
+
+        let result = Config::load_from_str(config_v2);
+        assert!(result.is_ok(), "v0.2.2 config should parse successfully");
+
+        let config = result.unwrap();
+        assert_eq!(config.session.sticky_ttl_seconds, 3600);
+        assert_eq!(config.session.renewal_threshold_seconds, 300);
+        assert_eq!(config.session.unavailable_cooldown_seconds, 7200, "Should use configured value");
     }
 }

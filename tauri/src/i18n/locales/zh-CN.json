@@ -6,6 +6,7 @@
   "nav": {
     "dashboard": "仪表盘",
     "accounts": "账户管理",
+    "usage": "使用统计",
     "settings": "设置",
     "logs": "日志"
   },
@@ -105,6 +106,8 @@
     "stickyTtlDesc": "同一会话将保持使用相同账户的时长",
     "renewalThreshold": "续期阈值（秒）",
     "renewalThresholdDesc": "会话剩余时间低于此值时自动续期",
+    "unavailableCooldown": "账户冷却时间（秒）",
+    "unavailableCooldownDesc": "账户不可用后等待重试的冷却时长",
     "save": "保存配置",
     "saving": "保存中...",
     "appSettings": "应用设置",
@@ -180,6 +183,26 @@
     "loading": "加载中...",
     "saved": "已保存",
     "deleted": "已删除"
+  },
+  "usageStats": {
+    "title": "使用统计",
+    "subtitle": "查看各账户的 Token 使用情况",
+    "timeRange": "时间范围",
+    "days": "天",
+    "databaseInfo": "数据库信息",
+    "dbPath": "路径",
+    "dbSize": "大小",
+    "dbStatus": "状态",
+    "dbExists": "正常",
+    "dbNotFound": "未找到",
+    "totalTokens": "总 Tokens",
+    "inputTokens": "输入 Tokens",
+    "outputTokens": "输出 Tokens",
+    "requests": "请求次数",
+    "input": "输入",
+    "output": "输出",
+    "noData": "暂无统计数据",
+    "export": "导出 CSV"
   },
   "server": {
     "startSuccess": "服务启动成功",

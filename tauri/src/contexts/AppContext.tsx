@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import { TauriAPI, ServerStatus, AccountSummary } from '@/services/api'
 import { Config, ConfigManager } from '@/services/config'
+import { PortConflictAPI } from '@/services/portConflict'
 import { listen } from '@tauri-apps/api/event'
 import { toast } from 'sonner'
 import i18n from '@/i18n/config'
@@ -38,6 +39,60 @@ const initialState: AppState = {
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<AppState>(initialState)
+
+  // 处理端口冲突
+  const handlePortConflict = async (port: number) => {
+    try {
+      // 检查占用端口的进程
+      const processInfo = await PortConflictAPI.checkPortConflict(port)
+
+      if (!processInfo) {
+        // 没有找到占用进程
+        toast.error(i18n.t('server.startFailed'), {
+          description: i18n.t('server.portInUse'),
+          duration: 6000,
+        })
+        return
+      }
+
+      // 显示确认对话框
+      const confirmed = window.confirm(
+        i18n.t('server.portConflictConfirm', {
+          port,
+          processName: processInfo.name,
+          pid: processInfo.pid,
+        })
+      )
+
+      if (!confirmed) {
+        toast.info(i18n.t('server.portConflictCancelled'))
+        return
+      }
+
+      // 使用 toast.promise 显示关闭进程的进度
+      await toast.promise(
+        (async () => {
+          await PortConflictAPI.killProcess(processInfo.pid)
+          // 等待一秒让端口释放
+          await new Promise((resolve) => setTimeout(resolve, 1000))
+          // 重新启动服务器
+          await TauriAPI.startServer()
+          await refreshStatus()
+        })(),
+        {
+          loading: i18n.t('server.killingProcess'),
+          success: i18n.t('server.startSuccess'),
+          error: i18n.t('server.killProcessFailed'),
+        }
+      )
+    } catch (error) {
+      console.error('Failed to handle port conflict:', error)
+      toast.error(i18n.t('server.portInUse'), {
+        description: String(error),
+        duration: 6000,
+      })
+    }
+  }
 
   const refreshStatus = async () => {
     try {
@@ -80,10 +135,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           duration: 8000,
         })
       } else if (errorMessage.includes('Port') && errorMessage.includes('already in use')) {
-        toast.error(i18n.t('server.startFailed'), {
-          description: i18n.t('server.portInUse'),
-          duration: 6000,
-        })
+        // 端口冲突 - 提取端口号并检查占用进程
+        const portMatch = errorMessage.match(/Port (\d+)/)
+        if (portMatch) {
+          const port = parseInt(portMatch[1])
+          await handlePortConflict(port)
+        } else {
+          toast.error(i18n.t('server.startFailed'), {
+            description: i18n.t('server.portInUse'),
+            duration: 6000,
+          })
+        }
       } else if (errorMessage.includes('Config')) {
         toast.error(i18n.t('server.startFailed'), {
           description: `${i18n.t('server.configError')}: ${errorMessage}`,

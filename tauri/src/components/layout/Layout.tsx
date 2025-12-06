@@ -5,6 +5,7 @@ import {
   Users,
   Settings,
   FileText,
+  BarChart3,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
@@ -26,6 +27,11 @@ const navigationItems = [
     name: 'nav.accounts',
     path: '/accounts',
     icon: Users,
+  },
+  {
+    name: 'nav.usage',
+    path: '/usage',
+    icon: BarChart3,
   },
   {
     name: 'nav.settings',

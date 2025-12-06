@@ -4,6 +4,7 @@ import { Dashboard } from '@/pages/Dashboard'
 import { Accounts } from '@/pages/Accounts'
 import { Settings } from '@/pages/Settings'
 import { Logs } from '@/pages/Logs'
+import { UsageStats } from '@/pages/UsageStats'
 import { Toaster } from 'sonner'
 
 function App() {
@@ -15,6 +16,7 @@ function App() {
           <Route path="/accounts" element={<Accounts />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/logs" element={<Logs />} />
+          <Route path="/usage" element={<UsageStats />} />
         </Routes>
       </Layout>
       <Toaster richColors position="top-right" />

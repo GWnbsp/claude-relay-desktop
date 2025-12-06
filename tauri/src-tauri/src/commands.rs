@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 use tauri::{State, api::notification::Notification};
 
-use crate::{app_settings::AppSettings, config::Config, logger::LogManager, server::ServerHandle};
+use crate::{app_settings::AppSettings, config::Config, logger::LogManager, port_utils, server::ServerHandle};
 
 /// 应用全局状态
 pub struct AppState {
@@ -441,4 +441,16 @@ pub async fn update_app_settings(
     }
 
     Ok(())
+}
+
+/// 检查指定端口是否被占用，如果被占用返回占用进程信息
+#[tauri::command]
+pub async fn check_port_conflict(port: u16) -> Result<Option<port_utils::ProcessInfo>, String> {
+    port_utils::find_process_by_port(port)
+}
+
+/// 终止指定进程
+#[tauri::command]
+pub async fn kill_process_by_pid(pid: u32) -> Result<(), String> {
+    port_utils::kill_process(pid)
 }
