@@ -213,6 +213,10 @@
     "restartFailed": "Failed to restart server",
     "noAccountsConfigured": "At least one account must be configured. Please add an account in Settings.",
     "portInUse": "Port is already in use. Please stop other instances or change the port.",
-    "configError": "Configuration error"
+    "configError": "Configuration error",
+    "portConflictConfirm": "Port {{port}} is occupied by process:\n\nProcess: {{processName}}\nPID: {{pid}}\n\nDo you want to kill this process and restart the server?",
+    "portConflictCancelled": "Operation cancelled",
+    "killingProcess": "Killing process...",
+    "killProcessFailed": "Failed to kill process"
   }
 }

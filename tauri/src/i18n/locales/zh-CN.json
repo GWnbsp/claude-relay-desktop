@@ -213,6 +213,10 @@
     "restartFailed": "服务重启失败",
     "noAccountsConfigured": "至少需要配置一个账户。请在设置中添加账户。",
     "portInUse": "端口已被占用。请停止其他实例或更改端口。",
-    "configError": "配置错误"
+    "configError": "配置错误",
+    "portConflictConfirm": "端口 {{port}} 被进程占用：\n\n进程名: {{processName}}\nPID: {{pid}}\n\n是否关闭该进程并重新启动服务器？",
+    "portConflictCancelled": "已取消操作",
+    "killingProcess": "正在关闭占用进程...",
+    "killProcessFailed": "关闭进程失败"
   }
 }

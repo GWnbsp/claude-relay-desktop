@@ -176,8 +176,6 @@ export function UsageStats() {
             {stats.map((stat) => {
               const total = stat.total_input + stat.total_output
               const percentage = (total / maxTokens) * 100
-              const inputPercent = (stat.total_input / total) * 100
-              const outputPercent = (stat.total_output / total) * 100
 
               return (
                 <div key={stat.account_id} className="rounded-lg border bg-card p-4">
