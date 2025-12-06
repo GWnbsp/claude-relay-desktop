@@ -47,11 +47,8 @@ fn main() {
     let menu = app_menu::create_app_menu();
 
     // 根据平台配置自动启动
-    #[cfg(target_os = "macos")]
+    // 注意: 即使在非 macOS 平台上,也需要提供 MacosLauncher 参数(虽然不会被使用)
     let autostart_config = tauri_plugin_autostart::MacosLauncher::LaunchAgent;
-
-    #[cfg(not(target_os = "macos"))]
-    let autostart_config = None;
 
     let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_autostart::init(

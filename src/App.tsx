@@ -4,6 +4,7 @@ import { Dashboard } from '@/pages/Dashboard'
 import { Accounts } from '@/pages/Accounts'
 import { Settings } from '@/pages/Settings'
 import { Logs } from '@/pages/Logs'
+import { Toaster } from 'sonner'
 
 function App() {
   return (
@@ -16,6 +17,7 @@ function App() {
           <Route path="/logs" element={<Logs />} />
         </Routes>
       </Layout>
+      <Toaster richColors position="top-right" />
     </BrowserRouter>
   )
 }

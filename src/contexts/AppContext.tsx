@@ -2,6 +2,8 @@ import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import { TauriAPI, ServerStatus, AccountSummary } from '@/services/api'
 import { Config, ConfigManager } from '@/services/config'
 import { listen } from '@tauri-apps/api/event'
+import { toast } from 'sonner'
+import i18n from '@/i18n/config'
 
 interface AppState {
   serverStatus: ServerStatus
@@ -63,18 +65,87 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }
 
   const startServer = async () => {
-    await TauriAPI.startServer()
-    await refreshStatus()
+    try {
+      await TauriAPI.startServer()
+      await refreshStatus()
+      toast.success(i18n.t('server.startSuccess'))
+    } catch (error: any) {
+      const errorMessage = String(error)
+      console.error('Failed to start server:', errorMessage)
+
+      // 检查是否是"需要配置账户"的错误
+      if (errorMessage.includes('At least one account must be configured')) {
+        toast.error(i18n.t('server.startFailed'), {
+          description: i18n.t('server.noAccountsConfigured'),
+          duration: 8000,
+        })
+      } else if (errorMessage.includes('Port') && errorMessage.includes('already in use')) {
+        toast.error(i18n.t('server.startFailed'), {
+          description: i18n.t('server.portInUse'),
+          duration: 6000,
+        })
+      } else if (errorMessage.includes('Config')) {
+        toast.error(i18n.t('server.startFailed'), {
+          description: `${i18n.t('server.configError')}: ${errorMessage}`,
+          duration: 6000,
+        })
+      } else {
+        toast.error(i18n.t('server.startFailed'), {
+          description: errorMessage,
+          duration: 6000,
+        })
+      }
+
+      // 仍然刷新状态以确保 UI 正确
+      await refreshStatus()
+    }
   }
 
   const stopServer = async () => {
-    await TauriAPI.stopServer()
-    await refreshStatus()
+    try {
+      await TauriAPI.stopServer()
+      await refreshStatus()
+      toast.success(i18n.t('server.stopSuccess'))
+    } catch (error: any) {
+      const errorMessage = String(error)
+      console.error('Failed to stop server:', errorMessage)
+      toast.error(i18n.t('server.stopFailed'), {
+        description: errorMessage,
+        duration: 5000,
+      })
+      await refreshStatus()
+    }
   }
 
   const restartServer = async () => {
-    await TauriAPI.restartServer()
-    await refreshStatus()
+    try {
+      await TauriAPI.restartServer()
+      await refreshStatus()
+      toast.success(i18n.t('server.restartSuccess'))
+    } catch (error: any) {
+      const errorMessage = String(error)
+      console.error('Failed to restart server:', errorMessage)
+
+      // 检查是否是"需要配置账户"的错误
+      if (errorMessage.includes('At least one account must be configured')) {
+        toast.error(i18n.t('server.restartFailed'), {
+          description: i18n.t('server.noAccountsConfigured'),
+          duration: 8000,
+        })
+      } else if (errorMessage.includes('Config')) {
+        toast.error(i18n.t('server.restartFailed'), {
+          description: `${i18n.t('server.configError')}: ${errorMessage}`,
+          duration: 6000,
+        })
+      } else {
+        toast.error(i18n.t('server.restartFailed'), {
+          description: errorMessage,
+          duration: 6000,
+        })
+      }
+
+      await refreshStatus()
+    }
   }
 
   const loadAccounts = async () => {

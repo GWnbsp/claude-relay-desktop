@@ -66,7 +66,7 @@
     "apiKeyPlaceholder": "Enter API Key",
     "refreshTokenPlaceholder": "Enter Refresh Token",
     "apiUrl": "API URL (Optional)",
-    "apiUrlPlaceholder": "e.g.: https://relay.nf.video or leave empty for default",
+    "apiUrlPlaceholder": "e.g.: https://xxxx or leave empty for default",
     "apiUrlDesc": "Custom relay server address, leave empty to use official API endpoint",
     "useProxy": "Use Proxy Server",
     "proxyType": "Proxy Type",
@@ -180,5 +180,16 @@
     "loading": "Loading...",
     "saved": "Saved",
     "deleted": "Deleted"
+  },
+  "server": {
+    "startSuccess": "Server started successfully",
+    "startFailed": "Failed to start server",
+    "stopSuccess": "Server stopped successfully",
+    "stopFailed": "Failed to stop server",
+    "restartSuccess": "Server restarted successfully",
+    "restartFailed": "Failed to restart server",
+    "noAccountsConfigured": "At least one account must be configured. Please add an account in Settings.",
+    "portInUse": "Port is already in use. Please stop other instances or change the port.",
+    "configError": "Configuration error"
   }
 }

@@ -13,6 +13,7 @@ pub struct ServerHandle {
     child: Child,
     port: u16,
     log_tasks: Vec<JoinHandle<()>>,
+    stderr_buffer: std::sync::Arc<tokio::sync::Mutex<Vec<String>>>,
 }
 
 /// 尝试解析 cc-relay-server 可执行路径：
@@ -183,6 +184,9 @@ impl ServerHandle {
 
         let mut log_tasks = Vec::new();
 
+        // 创建一个共享的 stderr 缓冲区，用于在启动失败时提供详细错误信息
+        let stderr_buffer = std::sync::Arc::new(tokio::sync::Mutex::new(Vec::new()));
+
         // 启动任务来读取 stdout
         if let Some(stdout) = stdout {
             let log_mgr = log_manager.clone();
@@ -202,10 +206,11 @@ impl ServerHandle {
             log_tasks.push(task);
         }
 
-        // 启动任务来读取 stderr
+        // 启动任务来读取 stderr，同时保存到缓冲区
         if let Some(stderr) = stderr {
             let log_mgr = log_manager.clone();
             let app_handle = tauri_app.clone();
+            let buffer = stderr_buffer.clone();
             let task = tokio::spawn(async move {
                 use tokio::io::AsyncBufReadExt;
                 let reader = BufReader::new(stderr);
@@ -214,6 +219,15 @@ impl ServerHandle {
                     // 清理可能的 ANSI 转义序列
                     let clean_line = strip_ansi_escapes::strip_str(&line);
                     log_mgr.log(format!("[stderr] {}", clean_line));
+
+                    // 保存到缓冲区（最多保留最近 20 行）
+                    let mut buf = buffer.lock().await;
+                    buf.push(clean_line.clone());
+                    if buf.len() > 20 {
+                        buf.remove(0);
+                    }
+                    drop(buf);
+
                     // 通过 Tauri 事件发送到前端
                     let _ = app_handle.emit_all("server-log", clean_line);
                 }
@@ -230,8 +244,25 @@ impl ServerHandle {
                 log_manager.log(format!("Server successfully started and listening on port {}", port));
             }
             Err(e) => {
-                // 服务启动失败，尝试杀死子进程并清理
-                let err_msg = format!("Server process started but failed to listen on port: {}", e);
+                // 服务启动失败，获取 stderr 缓冲区中的错误信息
+                let stderr_lines = stderr_buffer.lock().await;
+                let stderr_output = stderr_lines.join("\n");
+                drop(stderr_lines);
+
+                // 构建详细的错误消息
+                let err_msg = if !stderr_output.is_empty() {
+                    // 提取最关键的错误信息
+                    if stderr_output.contains("At least one account must be configured") {
+                        "At least one account must be configured".to_string()
+                    } else if stderr_output.contains("Failed to load config") {
+                        format!("Config error: {}", stderr_output.lines().next().unwrap_or(&stderr_output))
+                    } else {
+                        format!("Server failed to start: {}", stderr_output.lines().next().unwrap_or(&stderr_output))
+                    }
+                } else {
+                    format!("Server process started but failed to listen on port: {}", e)
+                };
+
                 log_manager.log(err_msg.clone());
 
                 // 尝试杀死进程
@@ -246,7 +277,7 @@ impl ServerHandle {
             }
         }
 
-        Ok(ServerHandle { child, port, log_tasks })
+        Ok(ServerHandle { child, port, log_tasks, stderr_buffer })
     }
 
     pub async fn stop(mut self) {
