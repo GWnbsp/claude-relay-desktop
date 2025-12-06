@@ -1,3 +1,4 @@
+use crate::db::{self, DbPool};
 use parking_lot::RwLock;
 use relay_core::{generate_session_hash, AccountProvider, Platform, Result};
 use std::collections::{HashMap, HashSet};
@@ -5,13 +6,9 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tracing::{debug, info, warn};
 
-pub struct StickySession {
-    account_id: String,
-    expires_at: Instant,
-}
-
 pub struct AccountCooldown {
     until: Instant,
+    #[allow(dead_code)] // Reserved for future logging/debugging
     reason: String,
 }
 
@@ -22,11 +19,12 @@ pub struct AccountUsage {
 
 pub struct UnifiedScheduler {
     accounts: Vec<Arc<dyn AccountProvider>>,
-    sticky_sessions: RwLock<HashMap<String, StickySession>>,
+    db_pool: DbPool,
     cooldowns: RwLock<HashMap<String, AccountCooldown>>,
     usage: RwLock<HashMap<String, AccountUsage>>,
     sticky_ttl: Duration,
     renewal_threshold: Duration,
+    unavailable_cooldown: Duration,
 }
 
 impl UnifiedScheduler {
@@ -34,14 +32,17 @@ impl UnifiedScheduler {
         accounts: Vec<Arc<dyn AccountProvider>>,
         sticky_ttl_secs: u64,
         renewal_threshold_secs: u64,
+        unavailable_cooldown_secs: u64,
+        db_pool: DbPool,
     ) -> Self {
         Self {
             accounts,
-            sticky_sessions: RwLock::new(HashMap::new()),
+            db_pool,
             cooldowns: RwLock::new(HashMap::new()),
             usage: RwLock::new(HashMap::new()),
             sticky_ttl: Duration::from_secs(sticky_ttl_secs),
             renewal_threshold: Duration::from_secs(renewal_threshold_secs),
+            unavailable_cooldown: Duration::from_secs(unavailable_cooldown_secs),
         }
     }
 
@@ -81,7 +82,7 @@ impl UnifiedScheduler {
 
     pub fn mark_account_unavailable(&self, account_id: &str, reason: &str) {
         let mut cooldowns = self.cooldowns.write();
-        let until = Instant::now() + Duration::from_secs(3600);
+        let until = Instant::now() + self.unavailable_cooldown;
         cooldowns.insert(
             account_id.to_string(),
             AccountCooldown {
@@ -92,7 +93,8 @@ impl UnifiedScheduler {
         warn!(
             account_id = account_id,
             reason = reason,
-            "Account marked as unavailable for 1 hour"
+            cooldown_seconds = self.unavailable_cooldown.as_secs(),
+            "Account marked as unavailable"
         );
     }
 
@@ -121,15 +123,16 @@ impl UnifiedScheduler {
         usage.get(account_id).map(|u| u.last_used)
     }
 
-    pub fn select_account(
+    pub async fn select_account(
         &self,
         platform: Platform,
         request_body: &serde_json::Value,
     ) -> Result<Arc<dyn AccountProvider>> {
         self.select_account_excluding(platform, request_body, &HashSet::new())
+            .await
     }
 
-    pub fn select_account_excluding(
+    pub async fn select_account_excluding(
         &self,
         platform: Platform,
         request_body: &serde_json::Value,
@@ -138,7 +141,7 @@ impl UnifiedScheduler {
         let session_hash = generate_session_hash(request_body);
 
         if let Some(ref hash) = session_hash {
-            if let Some(account) = self.get_sticky_account(hash, platform, excluded) {
+            if let Some(account) = self.get_sticky_account(hash, platform, excluded).await {
                 debug!(session_hash = %hash, account_id = account.id(), "Using sticky session account");
                 self.record_account_used(account.id());
                 return Ok(account);
@@ -148,7 +151,7 @@ impl UnifiedScheduler {
         let account = self.select_available_account(platform, excluded)?;
 
         if let Some(hash) = session_hash {
-            self.set_sticky_session(&hash, account.id());
+            self.set_sticky_session(&hash, account.id()).await;
             debug!(session_hash = %hash, account_id = account.id(), "Created new sticky session");
         }
 
@@ -164,64 +167,58 @@ impl UnifiedScheduler {
         Ok(account)
     }
 
-    fn get_sticky_account(
+    async fn get_sticky_account(
         &self,
         session_hash: &str,
         platform: Platform,
         excluded: &HashSet<String>,
     ) -> Option<Arc<dyn AccountProvider>> {
-        let now = Instant::now();
+        // Query database for sticky session
+        let session = match db::get_sticky_session(&self.db_pool, session_hash).await {
+            Ok(Some(s)) => s,
+            Ok(None) => return None,
+            Err(e) => {
+                warn!(error = %e, session_hash = %session_hash, "Failed to get sticky session");
+                return None;
+            }
+        };
 
-        {
-            let sessions = self.sticky_sessions.read();
-            if let Some(session) = sessions.get(session_hash) {
-                if now < session.expires_at {
-                    if excluded.contains(&session.account_id) {
-                        return None;
-                    }
-                    if self.is_account_in_cooldown(&session.account_id) {
-                        return None;
-                    }
+        let (account_id, remaining_secs) = session;
 
-                    let account = self.accounts.iter().find(|a| {
-                        a.id() == session.account_id
-                            && a.platform() == platform
-                            && a.is_available()
-                    });
+        // Check if account is excluded or in cooldown
+        if excluded.contains(&account_id) {
+            return None;
+        }
+        if self.is_account_in_cooldown(&account_id) {
+            return None;
+        }
 
-                    if let Some(account) = account {
-                        let remaining = session.expires_at.duration_since(now);
-                        if remaining < self.renewal_threshold {
-                            drop(sessions);
-                            self.renew_sticky_session(session_hash);
-                        }
-                        return Some(account.clone());
-                    }
-                }
+        // Find the account
+        let account = self.accounts.iter().find(|a| {
+            a.id() == account_id && a.platform() == platform && a.is_available()
+        })?;
+
+        // Smart renewal: only renew if remaining time < threshold
+        if remaining_secs < self.renewal_threshold.as_secs() as i64 {
+            let ttl = self.sticky_ttl.as_secs() as i64;
+            if let Err(e) =
+                db::upsert_sticky_session(&self.db_pool, session_hash, &account_id, ttl).await
+            {
+                warn!(error = %e, session_hash = %session_hash, "Failed to renew sticky session");
+            } else {
+                debug!(session_hash = %session_hash, "Renewed sticky session");
             }
         }
 
-        let mut sessions = self.sticky_sessions.write();
-        sessions.remove(session_hash);
-        None
+        Some(account.clone())
     }
 
-    fn set_sticky_session(&self, session_hash: &str, account_id: &str) {
-        let mut sessions = self.sticky_sessions.write();
-        sessions.insert(
-            session_hash.to_string(),
-            StickySession {
-                account_id: account_id.to_string(),
-                expires_at: Instant::now() + self.sticky_ttl,
-            },
-        );
-    }
-
-    fn renew_sticky_session(&self, session_hash: &str) {
-        let mut sessions = self.sticky_sessions.write();
-        if let Some(session) = sessions.get_mut(session_hash) {
-            session.expires_at = Instant::now() + self.sticky_ttl;
-            debug!(session_hash = %session_hash, "Renewed sticky session");
+    async fn set_sticky_session(&self, session_hash: &str, account_id: &str) {
+        let ttl = self.sticky_ttl.as_secs() as i64;
+        if let Err(e) =
+            db::upsert_sticky_session(&self.db_pool, session_hash, account_id, ttl).await
+        {
+            warn!(error = %e, session_hash = %session_hash, "Failed to set sticky session");
         }
     }
 
@@ -267,30 +264,18 @@ impl UnifiedScheduler {
         Ok(available.remove(0))
     }
 
-    pub fn cleanup_expired_sessions(&self) {
+    pub fn cleanup_expired_cooldowns(&self) {
         let now = Instant::now();
-
-        {
-            let mut sessions = self.sticky_sessions.write();
-            let before = sessions.len();
-            sessions.retain(|_, session| now < session.expires_at);
-            let removed = before - sessions.len();
-            if removed > 0 {
-                debug!(removed = removed, "Cleaned up expired sticky sessions");
-            }
-        }
-
-        {
-            let mut cooldowns = self.cooldowns.write();
-            let before = cooldowns.len();
-            cooldowns.retain(|_, cooldown| now < cooldown.until);
-            let removed = before - cooldowns.len();
-            if removed > 0 {
-                debug!(removed = removed, "Cleaned up expired account cooldowns");
-            }
+        let mut cooldowns = self.cooldowns.write();
+        let before = cooldowns.len();
+        cooldowns.retain(|_, cooldown| now < cooldown.until);
+        let removed = before - cooldowns.len();
+        if removed > 0 {
+            debug!(removed = removed, "Cleaned up expired account cooldowns");
         }
     }
 
+    #[allow(dead_code)] // Reserved for admin API
     pub fn get_accounts_by_platform(&self, platform: Platform) -> Vec<Arc<dyn AccountProvider>> {
         self.accounts
             .iter()
@@ -299,7 +284,320 @@ impl UnifiedScheduler {
             .collect()
     }
 
+    #[allow(dead_code)] // Reserved for admin API
     pub fn get_all_accounts(&self) -> &[Arc<dyn AccountProvider>] {
         &self.accounts
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use async_trait::async_trait;
+    use relay_core::{Credentials, ProxyConfig};
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    struct MockAccount {
+        id: String,
+        name: String,
+        platform: Platform,
+        priority: u32,
+        available: AtomicBool,
+    }
+
+    impl MockAccount {
+        fn new(id: &str, platform: Platform, priority: u32) -> Self {
+            Self {
+                id: id.to_string(),
+                name: format!("Mock {}", id),
+                platform,
+                priority,
+                available: AtomicBool::new(true),
+            }
+        }
+    }
+
+    #[async_trait]
+    impl AccountProvider for MockAccount {
+        fn id(&self) -> &str {
+            &self.id
+        }
+
+        fn name(&self) -> &str {
+            &self.name
+        }
+
+        fn platform(&self) -> Platform {
+            self.platform
+        }
+
+        fn priority(&self) -> u32 {
+            self.priority
+        }
+
+        fn is_available(&self) -> bool {
+            self.available.load(Ordering::SeqCst)
+        }
+
+        async fn get_credentials(&self) -> relay_core::Result<Credentials> {
+            Ok(Credentials::ApiKey("test-key".to_string()))
+        }
+
+        fn proxy_config(&self) -> Option<&ProxyConfig> {
+            None
+        }
+
+        fn mark_unavailable(&self, _duration: Duration, _reason: &str) {
+            self.available.store(false, Ordering::SeqCst);
+        }
+
+        fn mark_available(&self) {
+            self.available.store(true, Ordering::SeqCst);
+        }
+    }
+
+    async fn setup_test_db() -> DbPool {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("test.db");
+        let path_str = path.to_str().unwrap().to_string();
+        std::mem::forget(dir);
+        db::init_database(&path_str).await.unwrap()
+    }
+
+    async fn setup_scheduler() -> (UnifiedScheduler, DbPool) {
+        let pool = setup_test_db().await;
+        let accounts: Vec<Arc<dyn AccountProvider>> = vec![
+            Arc::new(MockAccount::new("acc1", Platform::Claude, 100)),
+            Arc::new(MockAccount::new("acc2", Platform::Claude, 50)),
+        ];
+        let scheduler = UnifiedScheduler::new(accounts, 3600, 300, 3600, pool.clone());
+        (scheduler, pool)
+    }
+
+    // ========================================================================
+    // Existing tests (adapted)
+    // ========================================================================
+
+    #[tokio::test]
+    async fn test_scheduler_creation_with_custom_cooldown() {
+        let pool = setup_test_db().await;
+        let accounts: Vec<Arc<dyn AccountProvider>> =
+            vec![Arc::new(MockAccount::new("test-1", Platform::Claude, 100))];
+
+        let scheduler = UnifiedScheduler::new(accounts, 3600, 300, 1800, pool);
+
+        assert_eq!(scheduler.sticky_ttl, Duration::from_secs(3600));
+        assert_eq!(scheduler.renewal_threshold, Duration::from_secs(300));
+        assert_eq!(scheduler.unavailable_cooldown, Duration::from_secs(1800));
+    }
+
+    #[tokio::test]
+    async fn test_mark_account_unavailable_uses_configured_cooldown() {
+        let pool = setup_test_db().await;
+        let accounts: Vec<Arc<dyn AccountProvider>> =
+            vec![Arc::new(MockAccount::new("test-1", Platform::Claude, 100))];
+
+        let scheduler = UnifiedScheduler::new(accounts, 3600, 300, 5, pool);
+
+        scheduler.mark_account_unavailable("test-1", "test_reason");
+
+        assert!(scheduler.is_account_in_cooldown("test-1"));
+
+        let cooldowns = scheduler.cooldowns.read();
+        let cooldown = cooldowns.get("test-1").unwrap();
+        let remaining = cooldown.until.duration_since(Instant::now());
+        assert!(remaining <= Duration::from_secs(5));
+        assert!(remaining >= Duration::from_secs(4));
+    }
+
+    #[tokio::test]
+    async fn test_mark_account_rate_limited() {
+        let pool = setup_test_db().await;
+        let accounts: Vec<Arc<dyn AccountProvider>> =
+            vec![Arc::new(MockAccount::new("test-1", Platform::Claude, 100))];
+
+        let scheduler = UnifiedScheduler::new(accounts, 3600, 300, 3600, pool);
+
+        scheduler.mark_account_rate_limited("test-1", 60);
+
+        assert!(scheduler.is_account_in_cooldown("test-1"));
+
+        let cooldowns = scheduler.cooldowns.read();
+        let cooldown = cooldowns.get("test-1").unwrap();
+        assert_eq!(cooldown.reason, "rate_limited");
+    }
+
+    #[tokio::test]
+    async fn test_mark_account_overloaded() {
+        let pool = setup_test_db().await;
+        let accounts: Vec<Arc<dyn AccountProvider>> =
+            vec![Arc::new(MockAccount::new("test-1", Platform::Claude, 100))];
+
+        let scheduler = UnifiedScheduler::new(accounts, 3600, 300, 3600, pool);
+
+        scheduler.mark_account_overloaded("test-1", 5);
+
+        assert!(scheduler.is_account_in_cooldown("test-1"));
+
+        let cooldowns = scheduler.cooldowns.read();
+        let cooldown = cooldowns.get("test-1").unwrap();
+        assert_eq!(cooldown.reason, "overloaded");
+    }
+
+    #[tokio::test]
+    async fn test_cooldown_cleanup() {
+        let pool = setup_test_db().await;
+        let accounts: Vec<Arc<dyn AccountProvider>> =
+            vec![Arc::new(MockAccount::new("test-1", Platform::Claude, 100))];
+
+        let scheduler = UnifiedScheduler::new(accounts, 3600, 300, 0, pool);
+
+        scheduler.mark_account_unavailable("test-1", "test_reason");
+
+        std::thread::sleep(Duration::from_millis(10));
+
+        scheduler.cleanup_expired_cooldowns();
+
+        let cooldowns = scheduler.cooldowns.read();
+        assert!(cooldowns.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_account_not_selected_during_cooldown() {
+        let pool = setup_test_db().await;
+        let accounts: Vec<Arc<dyn AccountProvider>> = vec![
+            Arc::new(MockAccount::new("test-1", Platform::Claude, 100)),
+            Arc::new(MockAccount::new("test-2", Platform::Claude, 50)),
+        ];
+
+        let scheduler = UnifiedScheduler::new(accounts, 3600, 300, 3600, pool);
+
+        scheduler.mark_account_unavailable("test-1", "test_reason");
+
+        let request_body = serde_json::json!({});
+        let selected = scheduler
+            .select_account(Platform::Claude, &request_body)
+            .await
+            .unwrap();
+
+        assert_eq!(selected.id(), "test-2");
+    }
+
+    // ========================================================================
+    // New database integration tests
+    // ========================================================================
+
+    #[tokio::test]
+    async fn test_sticky_session_persisted_to_db() {
+        let (scheduler, pool) = setup_scheduler().await;
+        let body = serde_json::json!({"system": "test system prompt"});
+
+        // First selection creates sticky session
+        let account1 = scheduler
+            .select_account(Platform::Claude, &body)
+            .await
+            .unwrap();
+
+        // Verify session persisted to database
+        let session_hash = generate_session_hash(&body).unwrap();
+        let db_session = db::get_sticky_session(&pool, &session_hash).await.unwrap();
+        assert!(db_session.is_some());
+        assert_eq!(db_session.unwrap().0, account1.id());
+    }
+
+    #[tokio::test]
+    async fn test_sticky_session_survives_restart() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("test.db");
+        let path_str = path.to_str().unwrap().to_string();
+        std::mem::forget(dir);
+
+        let body = serde_json::json!({"system": "test"});
+
+        // First "run"
+        let first_account_id = {
+            let pool = db::init_database(&path_str).await.unwrap();
+            let accounts: Vec<Arc<dyn AccountProvider>> =
+                vec![Arc::new(MockAccount::new("acc1", Platform::Claude, 100))];
+            let scheduler = UnifiedScheduler::new(accounts, 3600, 300, 3600, pool);
+            let account = scheduler
+                .select_account(Platform::Claude, &body)
+                .await
+                .unwrap();
+            account.id().to_string()
+        };
+
+        // Simulate restart with new scheduler, same database
+        let pool = db::init_database(&path_str).await.unwrap();
+        let accounts: Vec<Arc<dyn AccountProvider>> = vec![
+            Arc::new(MockAccount::new("acc1", Platform::Claude, 100)),
+            Arc::new(MockAccount::new("acc2", Platform::Claude, 50)),
+        ];
+        let scheduler = UnifiedScheduler::new(accounts, 3600, 300, 3600, pool);
+
+        // Should return same account (restored from database)
+        let account = scheduler
+            .select_account(Platform::Claude, &body)
+            .await
+            .unwrap();
+        assert_eq!(account.id(), first_account_id);
+    }
+
+    #[tokio::test]
+    async fn test_smart_renewal() {
+        let (scheduler, pool) = setup_scheduler().await;
+        let body = serde_json::json!({"system": "test"});
+        let session_hash = generate_session_hash(&body).unwrap();
+
+        // Insert a session about to expire (100 seconds remaining, threshold is 300)
+        db::upsert_sticky_session(&pool, &session_hash, "acc1", 100)
+            .await
+            .unwrap();
+
+        // Select account should trigger renewal
+        scheduler
+            .select_account(Platform::Claude, &body)
+            .await
+            .unwrap();
+
+        // Verify renewed (new remaining time should be ~3600)
+        let session = db::get_sticky_session(&pool, &session_hash)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(
+            session.1 > 3500,
+            "Session should be renewed, got {} seconds",
+            session.1
+        );
+    }
+
+    #[tokio::test]
+    async fn test_no_renewal_when_not_needed() {
+        let (scheduler, pool) = setup_scheduler().await;
+        let body = serde_json::json!({"system": "test"});
+        let session_hash = generate_session_hash(&body).unwrap();
+
+        // Insert a session with plenty of time (3000 seconds, threshold is 300)
+        db::upsert_sticky_session(&pool, &session_hash, "acc1", 3000)
+            .await
+            .unwrap();
+
+        // Select account should NOT trigger renewal
+        scheduler
+            .select_account(Platform::Claude, &body)
+            .await
+            .unwrap();
+
+        // Verify NOT renewed (remaining time should still be ~3000, not ~3600)
+        let session = db::get_sticky_session(&pool, &session_hash)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(
+            session.1 < 3100 && session.1 > 2900,
+            "Session should NOT be renewed, got {} seconds",
+            session.1
+        );
     }
 }

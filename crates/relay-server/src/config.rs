@@ -123,6 +123,8 @@ pub struct SessionConfig {
     pub sticky_ttl_seconds: u64,
     #[serde(default = "default_renewal_threshold")]
     pub renewal_threshold_seconds: u64,
+    #[serde(default = "default_unavailable_cooldown")]
+    pub unavailable_cooldown_seconds: u64,
 }
 
 fn default_sticky_ttl() -> u64 {
@@ -133,11 +135,16 @@ fn default_renewal_threshold() -> u64 {
     300
 }
 
+fn default_unavailable_cooldown() -> u64 {
+    3600
+}
+
 impl Default for SessionConfig {
     fn default() -> Self {
         Self {
             sticky_ttl_seconds: default_sticky_ttl(),
             renewal_threshold_seconds: default_renewal_threshold(),
+            unavailable_cooldown_seconds: default_unavailable_cooldown(),
         }
     }
 }
@@ -148,11 +155,10 @@ impl Config {
             path: path.as_ref().display().to_string(),
             source: e,
         })?;
-        Self::load_from_str(&content)
-    }
 
-    pub fn load_from_str(content: &str) -> Result<Self, ConfigError> {
-        let config: Config = toml::from_str(content).map_err(|e| ConfigError::Parse { source: e })?;
+        let config: Config =
+            toml::from_str(&content).map_err(|e| ConfigError::Parse { source: e })?;
+
         config.validate()?;
         Ok(config)
     }
@@ -245,5 +251,155 @@ api_url = "https://api.openai.com/v1"
             }
             _ => panic!("Expected OpenaiResponses account"),
         }
+    }
+
+    #[test]
+    fn test_session_config_default_values() {
+        let config_content = r#"
+[server]
+host = "127.0.0.1"
+port = 3000
+
+[[accounts]]
+type = "claude-api"
+id = "test-1"
+name = "Test Account"
+api_key = "sk-test"
+"#;
+
+        let config: Config = toml::from_str(config_content).unwrap();
+        assert_eq!(config.session.sticky_ttl_seconds, 3600);
+        assert_eq!(config.session.renewal_threshold_seconds, 300);
+        assert_eq!(config.session.unavailable_cooldown_seconds, 3600);
+    }
+
+    #[test]
+    fn test_session_config_custom_values() {
+        let config_content = r#"
+[server]
+host = "127.0.0.1"
+port = 3000
+
+[session]
+sticky_ttl_seconds = 7200
+renewal_threshold_seconds = 600
+unavailable_cooldown_seconds = 1800
+
+[[accounts]]
+type = "claude-api"
+id = "test-1"
+name = "Test Account"
+api_key = "sk-test"
+"#;
+
+        let config: Config = toml::from_str(config_content).unwrap();
+        assert_eq!(config.session.sticky_ttl_seconds, 7200);
+        assert_eq!(config.session.renewal_threshold_seconds, 600);
+        assert_eq!(config.session.unavailable_cooldown_seconds, 1800);
+    }
+
+    #[test]
+    fn test_session_config_partial_override() {
+        let config_content = r#"
+[server]
+host = "127.0.0.1"
+port = 3000
+
+[session]
+unavailable_cooldown_seconds = 300
+
+[[accounts]]
+type = "claude-api"
+id = "test-1"
+name = "Test Account"
+api_key = "sk-test"
+"#;
+
+        let config: Config = toml::from_str(config_content).unwrap();
+        // Default values for unspecified fields
+        assert_eq!(config.session.sticky_ttl_seconds, 3600);
+        assert_eq!(config.session.renewal_threshold_seconds, 300);
+        // Custom value
+        assert_eq!(config.session.unavailable_cooldown_seconds, 300);
+    }
+
+    #[test]
+    fn test_api_keys_before_server_section() {
+        let content = r#"
+api_keys = ["key1", "key2"]
+
+[server]
+host = "127.0.0.1"
+port = 3000
+
+[[accounts]]
+type = "claude-api"
+id = "test"
+name = "Test"
+api_key = "sk-test"
+"#;
+        let config: Config = toml::from_str(content).unwrap();
+        assert_eq!(config.api_keys.len(), 2);
+        assert_eq!(config.api_keys[0], "key1");
+        assert_eq!(config.api_keys[1], "key2");
+    }
+
+    #[test]
+    fn test_api_keys_after_server_section_ignored() {
+        // IMPORTANT: This test documents a TOML parsing quirk.
+        // api_keys placed AFTER [server] is parsed as server.api_keys,
+        // which is ignored because ServerConfig doesn't have that field.
+        let content = r#"
+[server]
+host = "127.0.0.1"
+port = 3000
+
+api_keys = ["key1", "key2"]
+
+[[accounts]]
+type = "claude-api"
+id = "test"
+name = "Test"
+api_key = "sk-test"
+"#;
+        let config: Config = toml::from_str(content).unwrap();
+        // api_keys is empty because it was placed after [server]!
+        assert_eq!(config.api_keys.len(), 0, "api_keys after [server] should be ignored");
+    }
+
+    #[test]
+    fn test_api_keys_empty_array() {
+        let content = r#"
+api_keys = []
+
+[server]
+host = "127.0.0.1"
+port = 3000
+
+[[accounts]]
+type = "claude-api"
+id = "test"
+name = "Test"
+api_key = "sk-test"
+"#;
+        let config: Config = toml::from_str(content).unwrap();
+        assert!(config.api_keys.is_empty());
+    }
+
+    #[test]
+    fn test_api_keys_not_specified() {
+        let content = r#"
+[server]
+host = "127.0.0.1"
+port = 3000
+
+[[accounts]]
+type = "claude-api"
+id = "test"
+name = "Test"
+api_key = "sk-test"
+"#;
+        let config: Config = toml::from_str(content).unwrap();
+        assert!(config.api_keys.is_empty());
     }
 }

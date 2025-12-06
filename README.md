@@ -1,156 +1,278 @@
-# Claude Code Relay - Desktop Edition
+# Claude Relay RS
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Rust](https://img.shields.io/badge/Rust-1.75+-orange.svg)](https://www.rust-lang.org/)
+[![AUR](https://img.shields.io/aur/version/claude-code-relay)](https://aur.archlinux.org/packages/claude-code-relay)
+[![Homebrew](https://img.shields.io/badge/Homebrew-tap-blue)](https://github.com/wakaka6/homebrew-tap)
+[![Docker](https://img.shields.io/docker/v/wakaka6/claude-code-relay?label=Docker)](https://hub.docker.com/r/wakaka6/claude-code-relay)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/wakaka6/claude-code-relay/pulls)
 
-一个基于 [claude-code-relay](https://github.com/wakaka6/claude-code-relay) 的跨平台桌面应用，为 AI API 中转服务提供图形化管理界面。
+**[English](./README_EN.md) | 简体中文**
 
-## 项目简介
+高性能 AI API 中转服务，使用 Rust 实现。支持 Claude、Gemini、OpenAI Responses (Codex) 多平台账户管理与智能调度。
 
-本项目是 [wakaka6/claude-code-relay](https://github.com/wakaka6/claude-code-relay) 的桌面版本，集成了 Tauri 框架，提供：
+## ✨ 功能特性
 
-- 🖥️ **跨平台桌面应用** - 支持 macOS、Windows 和 Linux
-- 🎨 **现代化 UI** - 基于 React + TailwindCSS 的美观界面
-- 🔧 **可视化配置** - 无需手动编辑配置文件
-- 📊 **实时监控** - Dashboard 显示服务器状态和账户信息
-- 🌐 **国际化支持** - 中文/英文双语界面
-- 🎭 **主题切换** - 支持亮色/暗色模式
-- 🚀 **开机自启** - 可选的系统启动项集成
-- 🔔 **系统通知** - 服务器状态变化通知
-- 📋 **系统托盘** - 最小化到托盘，后台运行
+### 多平台支持
 
-## 核心功能
+| 平台                 | 认证方式        | 说明                                             |
+| -------------------- | --------------- | ------------------------------------------------ |
+| **Claude**           | OAuth / API Key | 支持 Claude Code CLI 的 OAuth 认证和标准 API Key |
+| **Gemini**           | Google OAuth    | 支持 Google OAuth 认证                           |
+| **OpenAI Responses** | API Key         | 支持 OpenAI Responses API (Codex CLI)            |
 
-### 多平台 AI API 支持
+### 核心功能
 
-- **Claude OAuth** - 支持 Claude Code CLI 的 OAuth 认证
-- **Claude API Key** - 支持标准 Anthropic API Key
-- **Gemini** - 支持 Google OAuth 认证
-- **OpenAI Responses** - 支持 OpenAI Responses API (Codex CLI)
+- 🔄 **智能账户调度** - 基于优先级的多账户自动切换
+- 🔗 **粘性会话** - 同一会话绑定同一账户，确保上下文连续性
+- 🔑 **自动 Token 刷新** - OAuth Token 自动续期，10秒提前刷新策略
+- 🌐 **代理支持** - 每个账户支持独立的 SOCKS5/HTTP 代理配置
+- 🔧 **自定义 API URL** - 支持配置自定义 API 端点（镜像站/代理）
+- 📡 **流式响应** - 完整的 SSE 流式传输支持
+- ⚡ **错误故障转移** - 智能错误检测与账户自动切换
 
-### 智能中转特性
+## 🚀 快速开始
 
-- **智能账户调度** - 基于优先级的多账户自动切换
-- **粘性会话** - 同一会话绑定同一账户，确保上下文连续性
-- **自动 Token 刷新** - OAuth Token 自动续期
-- **代理支持** - 每个账户支持独立的 SOCKS5/HTTP 代理配置
-- **流式响应** - 完整的 SSE 流式传输支持
-- **错误故障转移** - 智能错误检测与账户自动切换
+### 1. 部署服务
 
-## 快速开始
+选择以下任一方式：
 
-### 下载安装包
-
-前往 [Releases](../../releases) 页面下载对应平台的安装包：
-
-- **macOS**: `.dmg` 或 `.app`
-- **Windows**: `.exe` 或 `.msi`
-- **Linux**: `.AppImage` 或 `.deb`
-
-### 初次配置
-
-1. 启动应用
-2. 前往 **设置 → 服务器配置** 添加账户
-3. 配置 API Keys（可选，用于访问控制）
-4. 点击 **保存配置**
-5. 前往 **Dashboard** 点击 **启动服务**
-
-### 使用中转服务
-
-配置客户端指向本地中转服务：
+**Docker（推荐）：**
 
 ```bash
-# Claude Code CLI
+mkdir cc-relay && cd cc-relay
+curl -O https://raw.githubusercontent.com/wakaka6/claude-code-relay/main/config.example.toml
+curl -O https://raw.githubusercontent.com/wakaka6/claude-code-relay/main/docker-compose.yml
+mv config.example.toml config.toml
+```
+
+**Arch Linux：**
+
+```bash
+yay -S claude-code-relay
+```
+
+**macOS：**
+
+```bash
+brew tap wakaka6/tap
+brew install claude-code-relay
+```
+
+### 2. 配置账户
+
+编辑配置文件，添加你的账户信息：
+
+```bash
+# Docker
+vim config.toml
+
+# AUR
+sudo vim /etc/cc-relay-server/config.toml
+
+# Homebrew
+vim $(brew --prefix)/etc/cc-relay-server/config.toml
+```
+
+最简配置示例（Claude API Key）：
+
+```toml
+# api_keys 必须在 [server] 之前
+api_keys = ["your-relay-key"]
+
+[server]
+host = "127.0.0.1"
+port = 3000
+
+[[accounts]]
+type = "claude-api"
+id = "main"
+name = "Main Account"
+priority = 100
+enabled = true
+api_key = "sk-ant-api03-xxxx"
+```
+
+### 3. 启动服务
+
+```bash
+# Docker
+docker compose up -d
+
+# AUR
+sudo systemctl enable --now cc-relay-server
+
+# Homebrew
+brew services start claude-code-relay
+```
+
+### 4. 配置客户端
+
+```bash
 export ANTHROPIC_BASE_URL=http://localhost:3000
-export ANTHROPIC_API_KEY=your-relay-api-key
-
-# OpenAI 兼容客户端
-export OPENAI_BASE_URL=http://localhost:3000/openai/v1
-export OPENAI_API_KEY=your-relay-api-key
+export ANTHROPIC_API_KEY=any-key  # 如果未配置 api_keys 认证，可以是任意值
+claude
 ```
 
-详细配置说明请参考 [客户端配置文档](#客户端配置)。
+## 📥 安装方式
 
-## 项目架构
-
-本项目由两部分组成：
-
-### 1. **Relay Server** (`crates/`)
-
-基于 [claude-code-relay](https://github.com/wakaka6/claude-code-relay) 的 Rust 中转服务核心，包含：
-
-- `relay-core/` - 核心类型与 Trait 定义
-- `relay-claude/` - Claude 账户与转发实现
-- `relay-gemini/` - Gemini 账户与转发实现
-- `relay-codex/` - OpenAI Responses (Codex) 账户与转发实现
-- `relay-openai-to-anthropic/` - OpenAI 格式转换器
-- `relay-server/` - HTTP 服务器与路由
-
-**相较于原项目的修改**：
-- 添加了与 Tauri 的集成支持
-- 优化了日志输出格式
-- 增强了错误处理机制
-
-### 2. **Desktop Frontend** (`src/`, `src-tauri/`)
-
-基于 Tauri 的桌面应用界面：
-
-- **前端** (`src/`) - React + TypeScript + TailwindCSS
-  - 可视化配置管理
-  - 实时状态监控
-  - 日志查看
-  - 国际化支持
-
-- **后端** (`src-tauri/`) - Rust + Tauri
-  - 服务器进程管理
-  - 系统托盘集成
-  - 应用菜单（macOS）
-  - 配置文件管理
-  - 系统通知
-
-详细架构说明请参考 [ARCHITECTURE.md](./ARCHITECTURE.md)。
-
-## 开发指南
-
-### 前置要求
-
-- **Node.js** 18+
-- **Rust** 1.70+
-- **系统依赖**：
-  - macOS: Xcode Command Line Tools
-  - Windows: Visual Studio Build Tools
-  - Linux: webkit2gtk, libayatana-appindicator3-1
-
-### 开发环境设置
+### Docker
 
 ```bash
-# 1. 克隆仓库
-git clone https://github.com/GWnbsp/claude-relay-desktop.git
-cd claude-relay-desktop
-
-# 2. 安装依赖
-npm install
-
-# 3. 构建 relay-server（首次运行）
-npm run build:server
-
-# 4. 启动开发服务器
-npm run tauri:dev
+docker run -d \
+  --name cc-relay-server \
+  -p 3000:3000 \
+  -v ./config.toml:/app/config.toml:ro \
+  -v ./data:/app/data \
+  wakaka6/claude-code-relay:latest
 ```
 
-### 可用脚本
+### Arch Linux (AUR)
 
-- `npm run dev` - 启动前端开发服务器
-- `npm run build` - 构建前端生产版本
-- `npm run tauri:dev` - 启动 Tauri 开发模式
-- `npm run tauri:build` - 打包生产版本
-- `npm run build:server` - 构建 relay-server (debug)
-- `npm run build:server:release` - 构建 relay-server (release)
+```bash
+yay -S claude-code-relay
+# 或
+paru -S claude-code-relay
+```
 
-详细开发指南请参考 [DEVELOPMENT.md](./DEVELOPMENT.md)。
+### macOS (Homebrew)
 
-## 客户端配置
+```bash
+brew tap wakaka6/tap
+brew install claude-code-relay
+```
 
-### Claude Code CLI
+### 二进制下载
+
+从 [Releases](https://github.com/wakaka6/claude-code-relay/releases) 下载对应平台的二进制文件。
+
+## ⚙️ 配置说明
+
+### 服务器配置
+
+```toml
+[server]
+host = "127.0.0.1"
+port = 3000
+database_path = "data/relay.db"
+log_level = "info"  # trace, debug, info, warn, error
+```
+
+### API Key 认证
+
+```toml
+api_keys = [
+    "your-api-key-1",
+    "your-api-key-2",
+]
+```
+
+留空 `api_keys = []` 则禁用认证，任意 key 都可访问，统计时标记为 `anonymous`。
+
+### 会话配置
+
+```toml
+[session]
+sticky_ttl_seconds = 3600            # 会话 TTL（默认 1 小时）
+renewal_threshold_seconds = 300       # 续期阈值（剩余 5 分钟时续期）
+unavailable_cooldown_seconds = 3600   # 账户不可用冷却时间
+```
+
+### 账户配置
+
+> 只需配置你需要使用的平台即可。
+
+<details>
+<summary><b>Claude OAuth 账户</b></summary>
+
+```toml
+[[accounts]]
+type = "claude-oauth"
+id = "claude-1"
+name = "Claude OAuth Account"
+priority = 100
+enabled = true
+refresh_token = "your-refresh-token"
+api_url = "https://api.anthropic.com"  # 可选
+```
+
+</details>
+
+<details>
+<summary><b>Claude API Key 账户</b></summary>
+
+```toml
+[[accounts]]
+type = "claude-api"
+id = "claude-api-1"
+name = "Claude API Account"
+priority = 90
+enabled = true
+api_key = "sk-ant-api03-xxxx"
+```
+
+</details>
+
+<details>
+<summary><b>Gemini 账户</b></summary>
+
+```toml
+[[accounts]]
+type = "gemini"
+id = "gemini-1"
+name = "Gemini Account"
+priority = 100
+enabled = true
+refresh_token = "your-google-refresh-token"
+```
+
+</details>
+
+<details>
+<summary><b>OpenAI Responses 账户</b></summary>
+
+```toml
+[[accounts]]
+type = "openai-responses"
+id = "codex-1"
+name = "OpenAI Responses Account"
+priority = 100
+enabled = true
+api_key = "sk-your-openai-api-key"
+```
+
+</details>
+
+<details>
+<summary><b>代理配置</b></summary>
+
+```toml
+[accounts.proxy]
+type = "socks5"  # 或 "http"
+host = "127.0.0.1"
+port = 1080
+username = "user"  # 可选
+password = "pass"  # 可选
+```
+
+</details>
+
+## 🔌 API 端点
+
+| 服务                 | 端点                                                  | 说明                |
+| -------------------- | ----------------------------------------------------- | ------------------- |
+| **Claude**           | `POST /api/v1/messages`                               | Claude Messages API |
+|                      | `POST /claude/v1/messages`                            | 别名路由            |
+| **Gemini**           | `POST /gemini/v1/models/:model:generateContent`       | 标准生成            |
+|                      | `POST /gemini/v1/models/:model:streamGenerateContent` | 流式生成            |
+| **OpenAI 兼容**      | `POST /openai/v1/chat/completions`                    | 转换为 Claude       |
+| **OpenAI Responses** | `POST /openai/v1/responses`                           | Responses API       |
+| **系统**             | `GET /health`                                         | 健康检查            |
+
+## 📱 客户端配置
+
+<details>
+<summary><b>Claude Code CLI</b></summary>
 
 ```bash
 export ANTHROPIC_BASE_URL=http://localhost:3000
@@ -158,7 +280,10 @@ export ANTHROPIC_API_KEY=your-relay-api-key
 claude
 ```
 
-### Gemini CLI
+</details>
+
+<details>
+<summary><b>Gemini CLI</b></summary>
 
 ```bash
 export GEMINI_API_BASE=http://localhost:3000/gemini
@@ -166,7 +291,10 @@ export GEMINI_API_KEY=your-relay-api-key
 gemini
 ```
 
-### OpenAI Codex CLI
+</details>
+
+<details>
+<summary><b>OpenAI Codex CLI</b></summary>
 
 ```bash
 export OPENAI_BASE_URL=http://localhost:3000/openai/v1
@@ -174,81 +302,81 @@ export OPENAI_API_KEY=your-relay-api-key
 codex
 ```
 
-### Cherry Studio / Cursor
+</details>
 
-在设置中配置：
-- **API 地址**: `http://localhost:3000`
-- **API Key**: `your-relay-api-key`
+<details>
+<summary><b>Python / Node.js SDK</b></summary>
 
-更多客户端配置示例请查看原项目文档。
+**Python:**
 
-## API 端点
-
-### Claude API
-```
-POST /api/v1/messages          # Claude Messages API
-POST /claude/v1/messages       # 别名路由
-GET  /api/v1/models            # 模型列表
+```python
+import anthropic
+client = anthropic.Anthropic(base_url="http://localhost:3000", api_key="your-key")
 ```
 
-### Gemini API
-```
-POST /gemini/v1/models/:model:generateContent
-POST /gemini/v1/models/:model:streamGenerateContent
-GET  /gemini/v1/models
-```
+**Node.js:**
 
-### OpenAI 兼容
-```
-POST /openai/v1/chat/completions   # OpenAI 格式转 Claude
-GET  /openai/v1/models
+```javascript
+import Anthropic from "@anthropic-ai/sdk";
+const client = new Anthropic({
+  baseURL: "http://localhost:3000",
+  apiKey: "your-key",
+});
 ```
 
-### 系统端点
+</details>
+
+## 🛠️ 开发
+
+### 从源码构建
+
+```bash
+git clone https://github.com/wakaka6/claude-code-relay.git
+cd claude-code-relay
+cargo build --release
 ```
-GET /health    # 健康检查
-GET /metrics   # 系统指标
+
+### 本地运行
+
+```bash
+cp config.example.toml config.toml
+# 编辑 config.toml
+./target/release/cc-relay-server --config config.toml
 ```
 
-## 跨平台支持
+### 测试与检查
 
-本应用已针对 Windows、macOS 和 Linux 进行了全面的跨平台适配。
+```bash
+cargo test
+cargo clippy
+cargo fmt
+```
 
-详细的平台兼容性说明请参考：
-- [PLATFORM_COMPATIBILITY.md](./PLATFORM_COMPATIBILITY.md) - 跨平台特性说明
-- [NOTIFICATION_SETUP.md](./NOTIFICATION_SETUP.md) - macOS 通知设置指南
+## ❓ 常见问题
 
-## 配置文件位置
+<details>
+<summary><b>Docker Compose 启动后无法连接服务</b></summary>
 
-应用配置文件默认位于：
+**问题现象：** 使用 `docker compose up` 启动服务后，客户端无法连接到 `localhost:3000`，提示连接被拒绝或无法找到服务。
 
-- **macOS**: `~/Library/Application Support/com.claude-relay.app/config.toml`
-- **Windows**: `%APPDATA%\com.claude-relay.app\config.toml`
-- **Linux**: `~/.config/claude-relay/config.toml`
+**原因：** 配置文件中 `host` 设置为 `127.0.0.1`，这表示服务只监听容器内部的 localhost，而不是对外暴露的网络接口。
 
-日志文件位于应用数据目录的 `logs/` 子目录。
+**解决方案：** 将配置文件中的 `host` 修改为 `0.0.0.0`，使服务监听所有网络接口：
 
-## 致谢
+```toml
+[server]
+host = "0.0.0.0"  # 允许外部访问
+port = 3000
+```
 
-- [wakaka6/claude-code-relay](https://github.com/wakaka6/claude-code-relay) - 原始 Relay Server 实现
-- [Tauri](https://tauri.app/) - 跨平台桌面应用框架
-- [shadcn/ui](https://ui.shadcn.com/) - UI 组件库
+> **说明：** `127.0.0.1` 仅允许本机访问，适用于直接在宿主机运行的场景。在 Docker 容器中，`127.0.0.1` 指向容器自身，外部无法访问。设置为 `0.0.0.0` 后，服务会监听容器的所有网络接口，配合 Docker 的端口映射即可从宿主机访问。
 
-## License
+</details>
 
-MIT License - 详见 [LICENSE](./LICENSE) 文件
-
-## 贡献
+## 🤝 贡献
 
 欢迎提交 Issue 和 Pull Request！
 
-如果你在使用过程中遇到问题，请：
-1. 查看 [常见问题](./docs/FAQ.md)（如果有）
-2. 搜索现有 [Issues](../../issues)
-3. 创建新的 Issue 并提供详细信息
+## 📄 License
 
-## 相关链接
-
-- [原项目仓库](https://github.com/wakaka6/claude-code-relay)
-- [Tauri 文档](https://tauri.app/)
-- [Claude API 文档](https://docs.anthropic.com/)
+[MIT License](LICENSE)
